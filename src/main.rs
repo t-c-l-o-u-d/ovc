@@ -610,11 +610,7 @@ fn set_executable(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Set executable permissions on a file (Windows - no-op)
-#[cfg(not(unix))]
-fn set_executable(_path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    Ok(())
-}
+
 
 /// List all locally installed OpenShift client versions
 ///
@@ -839,16 +835,4 @@ fn create_symlink(target: &PathBuf, link: &PathBuf) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
-/// Create a symlink (Windows implementation)
-#[cfg(windows)]
-fn create_symlink(target: &PathBuf, link: &PathBuf) -> Result<(), Box<dyn Error>> {
-    std::os::windows::fs::symlink_file(target, link).map_err(|e| {
-        format!(
-            "Failed to create symlink {} -> {}: {}",
-            link.display(),
-            target.display(),
-            e
-        )
-    })?;
-    Ok(())
-}
+
