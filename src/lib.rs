@@ -4,7 +4,7 @@
 //! including platform detection, version comparison, and utility functions for
 //! downloading and organizing different versions of the OpenShift CLI tool.
 
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Base URL for the OpenShift mirror where client binaries are hosted
 pub const OC_MIRROR_BASE: &str = "https://mirror.openshift.com/pub/openshift-v4";
@@ -160,10 +160,10 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
     // If base versions are equal, handle pre-release logic
     match (a_is_prerelease, b_is_prerelease) {
-        (true, false) => std::cmp::Ordering::Less,    // 4.19.0-rc.1 < 4.19.0
+        (true, false) => std::cmp::Ordering::Less, // 4.19.0-rc.1 < 4.19.0
         (false, true) => std::cmp::Ordering::Greater, // 4.19.0 > 4.19.0-rc.1
-        (true, true) => a_suffix.cmp(&b_suffix),      // rc.1 vs rc.2
-        (false, false) => a.cmp(b),                   // fallback for suffixes like "EUS"
+        (true, true) => a_suffix.cmp(&b_suffix),   // rc.1 vs rc.2
+        (false, false) => a.cmp(b),                // fallback for suffixes like "EUS"
     }
 }
 
@@ -257,13 +257,13 @@ pub fn is_stable_version(version: &str) -> bool {
 ///
 /// # Examples
 /// ```
-/// use std::path::PathBuf;
+/// use std::path::Path;
 /// use ovc::extract_version_from_path;
-/// 
-/// let path = PathBuf::from("/path/to/oc-4.19.0");
-/// assert_eq!(extract_version_from_path(&path), "4.19.0");
+///
+/// let path = Path::new("/path/to/oc-4.19.0");
+/// assert_eq!(extract_version_from_path(path), "4.19.0");
 /// ```
-pub fn extract_version_from_path(path: &PathBuf) -> String {
+pub fn extract_version_from_path(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .and_then(|name| name.strip_prefix("oc-"))
@@ -286,12 +286,15 @@ pub fn extract_version_from_path(path: &PathBuf) -> String {
 /// # Examples
 /// ```
 /// use ovc::find_matching_version;
-/// 
+///
 /// let available = vec!["4.19.0".to_string(), "4.19.1".to_string(), "4.20.0".to_string()];
 /// assert_eq!(find_matching_version("4.19", &available), Some("4.19.1".to_string()));
 /// assert_eq!(find_matching_version("4.19.0", &available), Some("4.19.0".to_string()));
 /// ```
-pub fn find_matching_version(server_version: &str, available_versions: &[String]) -> Option<String> {
+pub fn find_matching_version(
+    server_version: &str,
+    available_versions: &[String],
+) -> Option<String> {
     // First try exact match
     if available_versions.contains(&server_version.to_string()) {
         return Some(server_version.to_string());

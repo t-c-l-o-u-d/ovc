@@ -12,22 +12,22 @@
 //! - Automatic platform detection
 //! - Version caching for improved performance
 
+use std::error::Error;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
-use std::error::Error;
 
+use chrono::{DateTime, Duration, Utc};
 use clap::Parser;
-use reqwest::blocking::Client;
-use tar::Archive;
 use flate2::read::GzDecoder;
-use chrono::{DateTime, Utc, Duration};
-use serde_json;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
+use tar::Archive;
+
 // Import from library
-use ovc::{Platform, compare_versions, is_stable_version, find_matching_version, OC_BIN_DIR};
+use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version};
 
 /// Cache structure for storing version information with timestamp
 ///
@@ -67,11 +67,7 @@ impl VersionCache {
 
 /// Command line interface structure
 #[derive(Parser)]
-#[command(
-    name = "ovc",
-    version,
-    about = "openshift client version control"
-)]
+#[command(name = "ovc", version, about = "openshift client version control")]
 struct Cli {
     /// Version to download
     #[arg(value_name = "VERSION")]
@@ -232,10 +228,8 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
     // Validate version format and resolve to full version
     let resolved_version = resolve_version(&input_version)?;
 
-    if verbose {
-        if input_version != resolved_version {
-            eprintln!("Resolved {} to {}", input_version, resolved_version);
-        }
+    if verbose && input_version != resolved_version {
+        eprintln!("Resolved {} to {}", input_version, resolved_version);
     }
 
     let (path, downloaded, _download_url) =
@@ -281,9 +275,7 @@ fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
-        return Err(
-            "Version must include at least major and minor version (e.g., 4.19)".into(),
-        );
+        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
     }
 
     let all_versions = list_installed_versions()?;
@@ -295,9 +287,7 @@ fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(
-            format!("No installed versions found matching {}", version_pattern).into(),
-        );
+        return Err(format!("No installed versions found matching {}", version_pattern).into());
     }
 
     for version in matching_versions {
@@ -323,9 +313,7 @@ fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
-        return Err(
-            "Version must include at least major and minor version (e.g., 4.19)".into(),
-        );
+        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
     }
 
     let all_versions = get_available_versions_with_verbose(verbose)?;
@@ -358,9 +346,7 @@ fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
-        return Err(
-            "Version must include at least major and minor version (e.g., 4.19)".into(),
-        );
+        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
     }
 
     let installed_versions = list_installed_versions()?;
@@ -372,9 +358,7 @@ fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(
-            format!("No installed versions found matching {}", version_pattern).into(),
-        );
+        return Err(format!("No installed versions found matching {}", version_pattern).into());
     }
 
     // Show what will be removed
@@ -454,9 +438,7 @@ fn resolve_version(input_version: &str) -> Result<String, Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = input_version.split('.').collect();
     if parts.len() < 2 {
-        return Err(
-            "Version must include at least major and minor version (e.g., 4.19)".into(),
-        );
+        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
     }
 
     // Check if it's already a full version (has patch number)
@@ -610,8 +592,6 @@ fn set_executable(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-
-
 /// List all locally installed OpenShift client versions
 ///
 /// Scans the binary directory for files matching the "oc-{version}" pattern
@@ -752,10 +732,7 @@ fn format_cache_expiry(timestamp: &DateTime<Utc>) -> String {
 /// # Arguments
 /// * `version` - Version to set as default
 /// * `platform` - Platform information
-fn set_default_oc_with_platform(
-    version: &str,
-    platform: &Platform,
-) -> Result<(), Box<dyn Error>> {
+fn set_default_oc_with_platform(version: &str, platform: &Platform) -> Result<(), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(platform)?;
     let oc_path = bin_dir.join(format!("oc-{}", version));
 
@@ -780,7 +757,7 @@ fn set_default_oc_with_platform(
 /// # Arguments
 /// * `oc_path` - Path to the target oc binary
 /// * `local_bin` - Directory to create symlinks in
-fn create_symlinks(oc_path: &PathBuf, local_bin: &PathBuf) -> Result<(), Box<dyn Error>> {
+fn create_symlinks(oc_path: &Path, local_bin: &Path) -> Result<(), Box<dyn Error>> {
     let symlink_oc = local_bin.join("oc");
     let symlink_kubectl = local_bin.join("kubectl");
 
@@ -807,7 +784,7 @@ fn create_symlinks(oc_path: &PathBuf, local_bin: &PathBuf) -> Result<(), Box<dyn
 ///
 /// # Arguments
 /// * `path` - Path to remove
-fn remove_if_exists(path: &PathBuf) -> Result<(), Box<dyn Error>> {
+fn remove_if_exists(path: &Path) -> Result<(), Box<dyn Error>> {
     // Check if the path exists as a file, directory, or symlink (including broken symlinks)
     if path.exists() || path.is_symlink() {
         fs::remove_file(path).map_err(|e| {
@@ -823,7 +800,7 @@ fn remove_if_exists(path: &PathBuf) -> Result<(), Box<dyn Error>> {
 
 /// Create a symlink (Unix implementation)
 #[cfg(unix)]
-fn create_symlink(target: &PathBuf, link: &PathBuf) -> Result<(), Box<dyn Error>> {
+fn create_symlink(target: &Path, link: &Path) -> Result<(), Box<dyn Error>> {
     std::os::unix::fs::symlink(target, link).map_err(|e| {
         format!(
             "Failed to create symlink {} -> {}: {}",
@@ -834,5 +811,3 @@ fn create_symlink(target: &PathBuf, link: &PathBuf) -> Result<(), Box<dyn Error>
     })?;
     Ok(())
 }
-
-
