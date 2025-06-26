@@ -23,38 +23,7 @@ jobs:
           rustup default stable
           rustup target add x86_64-unknown-linux-gnu
       
-      - name: Cache Rust toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/update-hashes
-            ~/.rustup/settings.toml
-          key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
-          restore-keys: rust-toolchain-${{ runner.os }}-
-      
-      - name: Cache cargo registry and git
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-cargo-${{ runner.os }}-
-      
-      - name: Cache target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: build-target-linux-x86_64-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
-          restore-keys: |
-            build-target-linux-x86_64-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-${{ runner.os }}-
+
       
       - name: Build Release Binary (optimized)
         run: |

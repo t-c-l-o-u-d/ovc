@@ -55,6 +55,16 @@ jobs:
           key: security-tools-${{ runner.os }}-cargo-audit-cargo-deny
           restore-keys: security-tools-${{ runner.os }}-
       
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: shared-target-security-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          restore-keys: |
+            shared-target-security-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            shared-target-${{ runner.os }}-
+      
       - name: Install security tools (parallel)
         run: |
           # Check if tools are already installed
