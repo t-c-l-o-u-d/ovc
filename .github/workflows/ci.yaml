@@ -10,44 +10,129 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Step 1: Lint (must pass first)
   lint:
     name: Lint
     uses: ./.github/workflows/lint.yaml
 
+  # Step 2: Test (must pass after lint)
   test:
     name: Test
     needs: lint
     uses: ./.github/workflows/test.yaml
 
+  # Step 3: Security (must pass after test)
   security:
     name: Security Audit
     needs: test
     uses: ./.github/workflows/security.yaml
 
+  # Step 4: Cache (after security passes)
+  cache:
+    name: Cache
+    needs: security
+    uses: ./.github/workflows/cache.yaml
+
+  # Step 5: All 4 build jobs (run in parallel after cache)
   build-linux-x86_64:
     name: Build Linux x86_64
-    needs: security
+    needs: cache
     uses: ./.github/workflows/build-linux-x86_64.yaml
 
   build-linux-arm64:
     name: Build Linux ARM64
-    needs: security
+    needs: cache
     uses: ./.github/workflows/build-linux-arm64.yaml
 
   build-macos-x86_64:
     name: Build macOS x86_64
-    needs: security
+    needs: cache
     uses: ./.github/workflows/build-macos-x86_64.yaml
 
   build-macos-arm64:
     name: Build macOS ARM64
-    needs: security
+    needs: cache
     uses: ./.github/workflows/build-macos-arm64.yaml
 
-  ci-complete:
-    name: CI Complete
-    needs: [lint, test, security, build-linux-x86_64, build-linux-arm64, build-macos-x86_64, build-macos-arm64]
+  # Step 6: Release (only if all builds succeed and version changed)
+  release:
+    name: Create Release
+    needs: [lint, test, security, cache, build-linux-x86_64, build-linux-arm64, build-macos-x86_64, build-macos-arm64]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    
     steps:
-      - name: CI Complete
-        run: echo "All CI jobs completed successfully!"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Check Version Changed
+        id: version_check
+        run: |
+          CURRENT_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if version changed from previous commit
+          git checkout HEAD~1 -- Cargo.toml 2>/dev/null || echo "No previous version"
+          PREVIOUS_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/' 2>/dev/null || echo "")
+          git checkout HEAD -- Cargo.toml
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ] && [ -n "$PREVIOUS_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Download All Artifacts
+        if: steps.version_check.outputs.changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      
+      - name: Prepare Release Assets
+        if: steps.version_check.outputs.changed == 'true'
+        run: |
+          mkdir -p release-assets
+          find ./artifacts -name "ovc-*" -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+      
+      - name: Generate Checksums
+        if: steps.version_check.outputs.changed == 'true'
+        run: |
+          cd release-assets
+          sha256sum ovc-* > ../SHA256SUMS
+          cd ..
+          cp SHA256SUMS release-assets/
+      
+      - name: Create Git Tag
+        if: steps.version_check.outputs.changed == 'true'
+        run: |
+          VERSION="v${{ steps.version_check.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+      
+      - name: Create GitHub Release
+        if: steps.version_check.outputs.changed == 'true'
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version_check.outputs.version }}
+          release_name: Release v${{ steps.version_check.outputs.version }}
+          draft: false
+          prerelease: false
+      
+      - name: Upload Release Assets
+        if: steps.version_check.outputs.changed == 'true'
+        run: |
+          for file in release-assets/*; do
+            filename=$(basename "$file")
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$file" \
+              "${{ steps.create_release.outputs.upload_url }}?name=$filename"
+          done
