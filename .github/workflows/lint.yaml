@@ -1,0 +1,61 @@
+name: Lint
+
+on: 
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rust: stable
+          - os: macos-13
+            rust: stable
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Rust (Ubuntu only)
+        if: contains(matrix.os, 'ubuntu')
+        run: |
+          rustup default stable
+          rustup component add rustfmt clippy
+      - name: Update Rust (macOS only)
+        if: contains(matrix.os, 'macos')
+        run: |
+          # macOS runners have Rust pre-installed, just update components
+          rustup default stable
+          rustup component add rustfmt clippy
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-lint-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-lint-cargo-
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-lint-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-lint-target-
+      - name: Check formatting
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          cargo fmt --all -- --check
+      - name: Run clippy
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          cargo clippy --all-targets --all-features -- -D warnings 

@@ -76,15 +76,14 @@ jobs:
   macos:
     needs: [check-version, create-tag]
     if: needs.check-version.outputs.version_changed == 'true'
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust and targets
         run: |
-          # macOS doesn't have Rust by default, so we'll install it
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source ~/.cargo/env
+          # macOS 13 runners have Rust pre-installed
+          rustup default stable
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Test x86_64
         run: |
@@ -116,56 +115,60 @@ jobs:
           chmod +x ./ovc-macos-arm64
           ./.github/workflows/upload_asset.sh ./ovc-macos-arm64 $GITHUB_TOKEN
 
-  linux:
+  linux-x86_64:
     needs: [check-version, create-tag]
     if: needs.check-version.outputs.version_changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust and cross-compilation tools
+      - name: Install Rust
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
           rustup default stable
-          rustup target add aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu
-      - name: Configure cross-compilation
-        run: |
-          mkdir -p ~/.cargo
-          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml
-          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
+          rustup target add x86_64-unknown-linux-gnu
       - name: Test x86_64
         run: |
-          source ~/.cargo/env 2>/dev/null || true
           cargo test --release
       - name: Build x86_64
         run: |
-          source ~/.cargo/env 2>/dev/null || true
           cargo build --release --target=x86_64-unknown-linux-gnu
-      - name: Build ARM64
+      - name: Strip binary
         run: |
-          source ~/.cargo/env 2>/dev/null || true
-          cargo build --release --target=aarch64-unknown-linux-gnu
-      - name: Strip binaries
-        run: |
-          source ~/.cargo/env 2>/dev/null || true
           strip target/x86_64-unknown-linux-gnu/release/ovc
-          aarch64-linux-gnu-strip target/aarch64-unknown-linux-gnu/release/ovc
       - name: Upload x86_64 binary
         run: |
-          source ~/.cargo/env 2>/dev/null || true
           cp ./target/x86_64-unknown-linux-gnu/release/ovc ./ovc-linux-x86_64
           chmod +x ./ovc-linux-x86_64
           ./.github/workflows/upload_asset.sh ./ovc-linux-x86_64 $GITHUB_TOKEN
+
+  linux-arm64:
+    needs: [check-version, create-tag]
+    if: needs.check-version.outputs.version_changed == 'true'
+    runs-on: ubuntu-24.04-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          rustup default stable
+          rustup target add aarch64-unknown-linux-gnu
+      - name: Test ARM64
+        run: |
+          cargo test --release
+      - name: Build ARM64
+        run: |
+          cargo build --release --target=aarch64-unknown-linux-gnu
+      - name: Strip binary
+        run: |
+          strip target/aarch64-unknown-linux-gnu/release/ovc
       - name: Upload ARM64 binary
         run: |
-          source ~/.cargo/env 2>/dev/null || true
           cp ./target/aarch64-unknown-linux-gnu/release/ovc ./ovc-linux-arm64
           chmod +x ./ovc-linux-arm64
           ./.github/workflows/upload_asset.sh ./ovc-linux-arm64 $GITHUB_TOKEN
 
   generate-checksums:
-    needs: [check-version, create-tag, macos, linux]
+    needs: [check-version, create-tag, macos, linux-x86_64, linux-arm64]
     if: needs.check-version.outputs.version_changed == 'true'
     runs-on: ubuntu-latest
     steps:
