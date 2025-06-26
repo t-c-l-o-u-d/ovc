@@ -1,8 +1,7 @@
 # Cargo configuration for optimized CI builds
 
 [build]
-# Use all available CPU cores for parallel compilation
-jobs = 0  # 0 means use all available cores
+# Let Cargo automatically determine optimal parallel compilation
 
 [profile.release]
 # Optimize for size and speed in CI
