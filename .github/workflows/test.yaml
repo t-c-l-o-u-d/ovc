@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Rust
+      - name: Setup Rust Toolchain
         run: |
           rustup default stable
       
@@ -24,15 +24,15 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: test-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: test-cargo-
+          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-cargo-
       
       - name: Cache target directory
         uses: actions/cache@v4
         with:
           path: target
-          key: test-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: test-target-
+          key: shared-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-target-
       
       - name: Build
         run: cargo build --verbose

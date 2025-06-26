@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Rust
+      - name: Setup Rust Toolchain
         run: |
           rustup default stable
       - name: Cache cargo registry
@@ -24,15 +24,12 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: security-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            security-cargo-
+          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-cargo-
       - name: Install cargo-audit
-        run: |
-          cargo install cargo-audit
+        run: cargo install cargo-audit
       - name: Run Security Audit
-        run: |
-          cargo audit
+        run: cargo audit
       - name: Run cargo-deny (if available)
         continue-on-error: true
         run: |
