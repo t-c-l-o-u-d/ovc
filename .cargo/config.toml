@@ -1,7 +1,3 @@
-[build]
-# Use faster linker when available
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
 [profile.dev]
 # Faster debug builds in CI
 debug = 1
