@@ -1,0 +1,46 @@
+name: Build macOS x86_64
+
+on:
+  workflow_call:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-macos-x86_64:
+    name: Build macOS x86_64
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust and targets
+        run: |
+          rustup default stable
+          rustup target add x86_64-apple-darwin
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: macos-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            macos-x86_64-cargo-
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: macos-x86_64-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            macos-x86_64-target-
+      - name: Install cross-compilation tools
+        run: |
+          # For macOS cross-compilation, we'll just do cargo check which doesn't need the full toolchain
+          echo "Cross-compiling to macOS x86_64 target"
+      - name: Check build for target
+        run: |
+          cargo check --target x86_64-apple-darwin --verbose 
