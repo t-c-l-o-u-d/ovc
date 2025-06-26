@@ -46,9 +46,8 @@ jobs:
           key: shared-target-test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
           restore-keys: |
             shared-target-test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-test-${{ runner.os }}-
+            shared-target-security-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
             shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-lint-${{ runner.os }}-
             shared-target-${{ runner.os }}-
       
       - name: Build for tests (optimized)
