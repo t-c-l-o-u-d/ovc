@@ -1,10 +1,6 @@
 name: Security Audit
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
   workflow_call:
   schedule:
     # Run security audit daily at 2 AM UTC
@@ -14,12 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  security-audit:
+  security:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust
+      - name: Setup Rust
         run: |
           rustup default stable
       - name: Cache cargo registry
@@ -34,7 +30,7 @@ jobs:
       - name: Install cargo-audit
         run: |
           cargo install cargo-audit
-      - name: Run security audit
+      - name: Run Security Audit
         run: |
           cargo audit
       - name: Run cargo-deny (if available)
