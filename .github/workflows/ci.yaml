@@ -10,12 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Step 1: Lint (must pass first)
+  # Step 1: Lint (downloads dependencies first)
   lint:
     name: Lint
     uses: ./.github/workflows/lint.yaml
 
-  # Step 2: Test (must pass after lint)
+  # Step 2: Test (reuses lint's cache)
   test:
     name: Test
     needs: lint
@@ -27,37 +27,32 @@ jobs:
     needs: test
     uses: ./.github/workflows/security.yaml
 
-  # Step 4: Cache (after security passes)
-  cache:
-    name: Cache
-    needs: security
-    uses: ./.github/workflows/cache.yaml
-
-  # Step 5: All 4 build jobs (run in parallel after cache)
+  # Step 4: All build jobs (run in parallel after security)
   build-linux-x86_64:
     name: Build Linux x86_64
-    needs: cache
+    needs: security
     uses: ./.github/workflows/build-linux-x86_64.yaml
 
-  build-linux-arm64:
-    name: Build Linux ARM64
-    needs: cache
-    uses: ./.github/workflows/build-linux-arm64.yaml
+  # TEMPORARILY DISABLED - Linux ARM64 build
+  # build-linux-arm64:
+  #   name: Build Linux ARM64
+  #   needs: security
+  #   uses: ./.github/workflows/build-linux-arm64.yaml
 
   build-macos-x86_64:
     name: Build macOS x86_64
-    needs: cache
+    needs: security
     uses: ./.github/workflows/build-macos-x86_64.yaml
 
   build-macos-arm64:
     name: Build macOS ARM64
-    needs: cache
+    needs: security
     uses: ./.github/workflows/build-macos-arm64.yaml
 
-  # Step 6: Release (only if all builds succeed and version changed)
+  # Step 5: Release (only if all builds succeed and version changed)
   release:
     name: Create Release
-    needs: [lint, test, security, cache, build-linux-x86_64, build-linux-arm64, build-macos-x86_64, build-macos-arm64]
+    needs: [lint, test, security, build-linux-x86_64, build-macos-x86_64, build-macos-arm64]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     

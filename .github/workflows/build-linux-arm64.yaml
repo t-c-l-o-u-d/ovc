@@ -25,15 +25,15 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: linux-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: linux-arm64-cargo-
+          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-cargo-
       
       - name: Cache target directory
         uses: actions/cache@v4
         with:
           path: target
-          key: linux-arm64-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: linux-arm64-target-
+          key: shared-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-target-
       
       - name: Build Release Binary
         run: |
