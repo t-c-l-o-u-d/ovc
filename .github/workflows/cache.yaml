@@ -1,40 +1,38 @@
-name: Cache Setup
+name: Cache
 
 on:
   workflow_call:
-    inputs:
-      cache-key-prefix:
-        required: true
-        type: string
-        description: 'Prefix for cache keys'
-      target:
-        required: false
-        type: string
-        default: ''
-        description: 'Target architecture for cross-compilation cache'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  cache-setup:
-    name: Cache Setup
+  cache:
+    name: Setup Cache
     runs-on: ubuntu-latest
+    
     steps:
       - uses: actions/checkout@v4
-      - name: Cache cargo registry
+      
+      - name: Setup Rust
+        run: |
+          rustup default stable
+      
+      - name: Setup Cargo Registry Cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ inputs.cache-key-prefix }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ inputs.cache-key-prefix }}-cargo-
-      - name: Cache target directory
+          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-cargo-
+      
+      - name: Setup Target Cache
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ inputs.cache-key-prefix }}-${{ inputs.target }}-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ inputs.cache-key-prefix }}-${{ inputs.target }}-target- 
+          key: shared-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: shared-target-
+      
+      - name: Cache Setup Complete
+        run: echo "Cache setup completed" 

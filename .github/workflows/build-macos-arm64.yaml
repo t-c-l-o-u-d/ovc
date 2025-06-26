@@ -2,25 +2,23 @@ name: Build macOS ARM64
 
 on:
   workflow_call:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-macos-arm64:
+  build:
     name: Build macOS ARM64
-    runs-on: ubuntu-latest
-
+    runs-on: macos-13
+    
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust and targets
+      
+      - name: Setup Rust
         run: |
           rustup default stable
           rustup target add aarch64-apple-darwin
+      
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -28,19 +26,30 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
           key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            macos-arm64-cargo-
+          restore-keys: macos-arm64-cargo-
+      
       - name: Cache target directory
         uses: actions/cache@v4
         with:
           path: target
           key: macos-arm64-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            macos-arm64-target-
-      - name: Install cross-compilation tools
+          restore-keys: macos-arm64-target-
+      
+      - name: Build Release Binary
         run: |
-          # For macOS cross-compilation, we'll just do cargo check which doesn't need the full toolchain
-          echo "Cross-compiling to macOS ARM64 target"
-      - name: Check build for target
+          cargo build --release --target aarch64-apple-darwin --verbose
+      
+      - name: Strip Binary
         run: |
-          cargo check --target aarch64-apple-darwin --verbose 
+          strip target/aarch64-apple-darwin/release/ovc
+      
+      - name: Prepare Binary
+        run: |
+          cp target/aarch64-apple-darwin/release/ovc ovc-macos-arm64
+          chmod +x ovc-macos-arm64
+      
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovc-macos-arm64
+          path: ovc-macos-arm64 
