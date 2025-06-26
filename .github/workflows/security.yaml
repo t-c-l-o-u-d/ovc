@@ -15,24 +15,87 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup Rust Toolchain
-        run: |
-          rustup default stable
+        run: rustup default stable
+      
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.rustup/toolchains
+            ~/.rustup/update-hashes
+            ~/.rustup/settings.toml
+          key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
+          restore-keys: rust-toolchain-${{ runner.os }}-
+      
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: shared-cargo-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-      - name: Run Security Audit
-        run: cargo audit
-      - name: Run cargo-deny (if available)
-        continue-on-error: true
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            shared-cargo-${{ runner.os }}-
+      
+      - name: Cache RustSec Advisory Database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/advisory-db
+          key: rustsec-db-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rustsec-db-
+      
+      - name: Cache security tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: security-tools-${{ runner.os }}-cargo-audit-cargo-deny
+          restore-keys: security-tools-${{ runner.os }}-
+      
+      - name: Install security tools (parallel)
         run: |
-          # Install cargo-deny for additional security checks
-          cargo install cargo-deny || echo "cargo-deny installation failed, skipping"
-          cargo deny check || echo "cargo-deny check failed or not configured" 
+          # Check if tools are already installed
+          if ! command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit --locked &
+          fi
+          if ! command -v cargo-deny &> /dev/null; then
+            cargo install cargo-deny --locked &
+          fi
+          wait
+      
+      - name: Run Security Audit (parallel)
+        run: |
+          # Run security checks in parallel for faster execution
+          echo "Running cargo audit..."
+          cargo audit --db ~/.cargo/advisory-db &
+          AUDIT_PID=$!
+          
+          echo "Running cargo deny..."
+          cargo deny check advisories sources &
+          DENY_PID=$!
+          
+          # Wait for both to complete and capture exit codes
+          wait $AUDIT_PID
+          AUDIT_EXIT=$?
+          
+          wait $DENY_PID
+          DENY_EXIT=$?
+          
+          # Report results
+          if [ $AUDIT_EXIT -eq 0 ]; then
+            echo "✅ cargo audit passed"
+          else
+            echo "❌ cargo audit failed"
+          fi
+          
+          if [ $DENY_EXIT -eq 0 ]; then
+            echo "✅ cargo deny passed"
+          else
+            echo "⚠️ cargo deny failed (continuing)"
+          fi
+          
+          # Fail job only if audit fails (deny failures are warnings)
+          exit $AUDIT_EXIT 
