@@ -1,0 +1,25 @@
+[build]
+# Use faster linker when available
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[profile.dev]
+# Faster debug builds in CI
+debug = 1
+incremental = true
+
+[profile.release]
+# Optimize for speed while keeping reasonable compile times
+lto = "thin"
+codegen-units = 1
+
+[registries.crates-io]
+protocol = "sparse"
+
+[net]
+# Increase network timeout for CI environments
+retry = 3
+git-fetch-with-cli = true
+
+[cargo-new]
+# Default to 2021 edition
+edition = "2021" 
