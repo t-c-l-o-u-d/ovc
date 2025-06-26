@@ -5,6 +5,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Optimize build settings for speed
+  CARGO_PROFILE_RELEASE_DEBUG: false
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+  CARGO_PROFILE_RELEASE_LTO: thin
 
 jobs:
   build:
@@ -14,34 +18,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Rust
+      - name: Setup Rust (optimized)
         run: |
           rustup default stable
           rustup target add aarch64-apple-darwin
+          # Set up cross-compilation environment
+          export SDKROOT=$(xcrun --show-sdk-path)
+          export MACOSX_DEPLOYMENT_TARGET=11.0
+      
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.rustup/toolchains
+            ~/.rustup/update-hashes
+            ~/.rustup/settings.toml
+          key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
+          restore-keys: rust-toolchain-${{ runner.os }}-
       
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: shared-cargo-
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            shared-cargo-${{ runner.os }}-
       
       - name: Cache target directory
         uses: actions/cache@v4
         with:
           path: target
-          key: shared-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: shared-target-
+          key: build-target-macos-arm64-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          restore-keys: |
+            build-target-macos-arm64-${{ hashFiles('**/Cargo.lock') }}-
+            shared-target-${{ runner.os }}-
       
-      - name: Build Release Binary
+      - name: Build Release Binary (optimized)
         run: |
-          cargo build --release --target aarch64-apple-darwin --verbose
+          # Set optimization flags for faster cross-compilation
+          export SDKROOT=$(xcrun --show-sdk-path)
+          export MACOSX_DEPLOYMENT_TARGET=11.0
+          
+          # Build with optimizations for speed
+          cargo build --release --target aarch64-apple-darwin
       
       - name: Strip Binary
-        run: |
-          strip target/aarch64-apple-darwin/release/ovc
+        run: strip target/aarch64-apple-darwin/release/ovc
       
       - name: Prepare Binary
         run: |

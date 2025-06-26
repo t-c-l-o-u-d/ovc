@@ -27,8 +27,7 @@ jobs:
             ~/.rustup/update-hashes
             ~/.rustup/settings.toml
           key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
-          restore-keys: |
-            rust-toolchain-${{ runner.os }}-
+          restore-keys: rust-toolchain-${{ runner.os }}-
       
       - name: Cache cargo registry and git
         uses: actions/cache@v4
@@ -37,10 +36,10 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
+            shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
             shared-cargo-${{ runner.os }}-
-            shared-cargo-
       
       - name: Cache target directory
         uses: actions/cache@v4
@@ -51,10 +50,11 @@ jobs:
             shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
             shared-target-lint-${{ runner.os }}-
             shared-target-${{ runner.os }}-
-            shared-target-
       
-      - name: Check Formatting
+      - name: Check Formatting (fast)
         run: cargo fmt --all -- --check
       
-      - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run Clippy (optimized)
+        run: |
+          # Use faster clippy settings for CI
+          cargo clippy --all-targets --all-features --message-format=short -- -D warnings
