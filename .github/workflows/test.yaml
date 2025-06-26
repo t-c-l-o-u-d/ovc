@@ -18,21 +18,41 @@ jobs:
         run: |
           rustup default stable
       
-      - name: Cache cargo registry
+      - name: Cache Rust toolchain
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: shared-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: shared-cargo-
+            ~/.rustup/toolchains
+            ~/.rustup/update-hashes
+            ~/.rustup/settings.toml
+          key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
+          restore-keys: |
+            rust-toolchain-${{ runner.os }}-
+      
+      - name: Cache cargo registry and git
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            shared-cargo-${{ runner.os }}-
+            shared-cargo-
       
       - name: Cache target directory
         uses: actions/cache@v4
         with:
           path: target
-          key: shared-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: shared-target-
+          key: shared-target-test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          restore-keys: |
+            shared-target-test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            shared-target-test-${{ runner.os }}-
+            shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            shared-target-lint-${{ runner.os }}-
+            shared-target-${{ runner.os }}-
+            shared-target-
       
       - name: Build
         run: cargo build --verbose
