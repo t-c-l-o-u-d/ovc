@@ -125,7 +125,7 @@ fn matches_version_pattern(version: &str, pattern: &str) -> bool {
     if version == pattern {
         return true;
     }
-    
+
     // Check if version starts with pattern followed by a dot
     version.starts_with(&format!("{}.", pattern))
 }
