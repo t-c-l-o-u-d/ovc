@@ -1,3 +1,4 @@
+// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
 //! Comprehensive tests for the ovc library and CLI application
 //!
 //! This module contains both unit tests for library functions and integration tests

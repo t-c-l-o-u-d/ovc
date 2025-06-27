@@ -1,3 +1,4 @@
+// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
 //! OpenShift Client Version Control (ovc) - Main Application
 //!
 //! This is the main entry point for the ovc CLI tool, which provides functionality

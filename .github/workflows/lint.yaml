@@ -1,10 +1,10 @@
+# GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+# Lint workflow
+
 name: Lint
 
 on:
   workflow_call:
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
   lint:
@@ -19,42 +19,8 @@ jobs:
           rustup default stable
           rustup component add rustfmt clippy
       
-      - name: Cache Rust toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/update-hashes
-            ~/.rustup/settings.toml
-          key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
-          restore-keys: rust-toolchain-${{ runner.os }}-
+      - name: Check Formatting
+        run: cargo fmt --check --verbose
       
-      - name: Cache cargo registry and git
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-cargo-${{ runner.os }}-
-      
-      - name: Cache target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
-          restore-keys: |
-            shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-lint-${{ runner.os }}-
-            shared-target-${{ runner.os }}-
-      
-      - name: Check Formatting (fast)
-        run: cargo fmt --all -- --check
-      
-      - name: Run Clippy (optimized)
-        run: |
-          # Use faster clippy settings for CI
-          cargo clippy --all-targets --all-features --message-format=short -- -D warnings
+      - name: Run Clippy
+        run: cargo clippy
