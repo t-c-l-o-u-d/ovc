@@ -1,0 +1,18 @@
+# GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+# Main workflow
+
+name: Main
+
+on: 
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    uses: ./.github/workflows/lint.yaml
+
+  security:
+    name: Security Audit
+    needs: [lint]
+    uses: ./.github/workflows/security.yaml

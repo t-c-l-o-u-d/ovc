@@ -1,13 +1,10 @@
+# GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+# Security workflow
+
 name: Security Audit
 
 on:
   workflow_call:
-  schedule:
-    # Run security audit daily at 2 AM UTC
-    - cron: '0 2 * * *'
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
   security:
@@ -19,93 +16,10 @@ jobs:
       - name: Setup Rust Toolchain
         run: rustup default stable
       
-      - name: Cache Rust toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/update-hashes
-            ~/.rustup/settings.toml
-          key: rust-toolchain-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'rust-toolchain', '.rust-version') }}
-          restore-keys: rust-toolchain-${{ runner.os }}-
+      - name: Install cargo-{audit,deny}
+        run: cargo install cargo-audit cargo-deny
       
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            shared-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-cargo-${{ runner.os }}-
-      
-      - name: Cache RustSec Advisory Database
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/advisory-db
-          key: rustsec-db-${{ hashFiles('Cargo.lock') }}
-          restore-keys: rustsec-db-
-      
-      - name: Cache security tools
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin
-          key: security-tools-${{ runner.os }}-cargo-audit-cargo-deny
-          restore-keys: security-tools-${{ runner.os }}-
-      
-      - name: Cache target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: shared-target-security-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
-          restore-keys: |
-            shared-target-security-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
-            shared-target-${{ runner.os }}-
-      
-      - name: Install security tools (parallel)
+      - name: Run cargo audit and cargo deny
         run: |
-          # Check if tools are already installed
-          if ! command -v cargo-audit &> /dev/null; then
-            cargo install cargo-audit --locked &
-          fi
-          if ! command -v cargo-deny &> /dev/null; then
-            cargo install cargo-deny --locked &
-          fi
-          wait
-      
-      - name: Run Security Audit (parallel)
-        run: |
-          # Run security checks in parallel for faster execution
-          echo "Running cargo audit..."
-          cargo audit --db ~/.cargo/advisory-db &
-          AUDIT_PID=$!
-          
-          echo "Running cargo deny..."
-          cargo deny check advisories sources &
-          DENY_PID=$!
-          
-          # Wait for both to complete and capture exit codes
-          wait $AUDIT_PID
-          AUDIT_EXIT=$?
-          
-          wait $DENY_PID
-          DENY_EXIT=$?
-          
-          # Report results
-          if [ $AUDIT_EXIT -eq 0 ]; then
-            echo "✅ cargo audit passed"
-          else
-            echo "❌ cargo audit failed"
-          fi
-          
-          if [ $DENY_EXIT -eq 0 ]; then
-            echo "✅ cargo deny passed"
-          else
-            echo "⚠️ cargo deny failed (continuing)"
-          fi
-          
-          # Fail job only if audit fails (deny failures are warnings)
-          exit $AUDIT_EXIT 
+          cargo audit
+          cargo deny check advisories bans sources

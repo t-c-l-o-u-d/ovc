@@ -1,3 +1,4 @@
+// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
 //! OpenShift Client Version Control Library
 //!
 //! This library provides functionality for managing OpenShift client (`oc`) versions,

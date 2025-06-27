@@ -1,0 +1,42 @@
+# GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+# Build workflow
+
+name: Build
+on:
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      runner:
+        required: true
+        type: string
+
+jobs:
+    build:
+        runs-on: ${{ inputs.runner }}
+        steps:
+        - uses: actions/checkout@v4
+
+        - name: Set Rust Toolchain to Stable
+          run: rustup default stable
+
+        - name: Test Release Binary
+          run: cargo test --release
+
+        - name: Build Release Binary
+          run: cargo build --release
+        
+        - name: Strip Binary
+          run: strip target/release/ovc
+        
+        - name: Prepare Binary
+          run: |
+            cp target/release/ovc ovc-${{ inputs.arch }}
+            chmod +x ovc-${{ inputs.arch }}
+        
+        - name: Upload Binary Artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: ovc-${{ inputs.arch }}
+            path: ovc-${{ inputs.arch }}
