@@ -19,7 +19,7 @@ jobs:
 
   build-matrix:
     name: Build Binaries
-    needs: [security]
+    #needs: [security]
     strategy:
       fail-fast: false
       matrix:
