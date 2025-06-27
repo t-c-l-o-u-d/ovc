@@ -1,7 +1,7 @@
 # GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
 # Main workflow
 
-name: Main
+name: Lint and Security Audit
 
 on: 
   push:
