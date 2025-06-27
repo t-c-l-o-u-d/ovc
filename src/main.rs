@@ -105,6 +105,31 @@ fn main() {
 // Command Implementation Functions
 // =============================================================================
 
+/// Check if a version matches the given version pattern
+///
+/// Performs proper version prefix matching by ensuring the pattern is followed
+/// by a dot or is an exact match. This prevents "4.1" from matching "4.13".
+///
+/// # Arguments
+/// * `version` - Full version string to check (e.g. "4.13.58")
+/// * `pattern` - Version pattern to match against (e.g. "4.1")
+///
+/// # Returns
+/// `true` if the version matches the pattern properly
+///
+/// # Examples
+/// * matches_version_pattern("4.1.0", "4.1") -> true
+/// * matches_version_pattern("4.13.58", "4.1") -> false
+/// * matches_version_pattern("4.19.3", "4.19") -> true
+fn matches_version_pattern(version: &str, pattern: &str) -> bool {
+    if version == pattern {
+        return true;
+    }
+    
+    // Check if version starts with pattern followed by a dot
+    version.starts_with(&format!("{}.", pattern))
+}
+
 /// Download and install a specific OpenShift client version
 ///
 /// This is the main download command that:
@@ -192,7 +217,7 @@ fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<
     // Filter versions that match the pattern
     let matching_versions: Vec<String> = all_versions
         .into_iter()
-        .filter(|v| v.starts_with(&version_pattern))
+        .filter(|v| matches_version_pattern(v, &version_pattern))
         .collect();
 
     if matching_versions.is_empty() {
@@ -230,7 +255,7 @@ fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<
     // Filter versions that match the pattern
     let matching_versions: Vec<String> = all_versions
         .into_iter()
-        .filter(|v| v.starts_with(&version_pattern))
+        .filter(|v| matches_version_pattern(v, &version_pattern))
         .collect();
 
     if matching_versions.is_empty() {
@@ -263,7 +288,7 @@ fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error
     // Filter versions that match the pattern
     let matching_versions: Vec<String> = installed_versions
         .into_iter()
-        .filter(|v| v.starts_with(&version_pattern))
+        .filter(|v| matches_version_pattern(v, &version_pattern))
         .collect();
 
     if matching_versions.is_empty() {
