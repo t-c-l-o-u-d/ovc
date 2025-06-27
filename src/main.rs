@@ -121,7 +121,8 @@ fn main() {
         // Default action: download, but require a version
         match cli.target_version {
             Some(version) => cmd_download(Some(version), cli.verbose),
-            None => Err("ovc: missing version".into()),
+            None => Err("ovc: missing version\nTry 'ovc --help' for more information.".into()),
+            
         }
     };
 
