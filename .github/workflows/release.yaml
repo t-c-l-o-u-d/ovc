@@ -11,18 +11,18 @@ permissions:
   contents: write
 
 jobs:
-  #lint:
-  #  name: Lint
-  #  uses: ./.github/workflows/lint.yaml
-#
-  #security:
-  #  name: Security Audit
-  #  needs: [lint]
-  #  uses: ./.github/workflows/security.yaml
+  lint:
+   name: Lint
+   uses: ./.github/workflows/lint.yaml
+
+  security:
+   name: Security Audit
+   needs: [lint]
+   uses: ./.github/workflows/security.yaml
 
   build-matrix:
     name: Build Binaries
-    #needs: [security]
+    needs: [security]
     strategy:
       fail-fast: false
       matrix:
