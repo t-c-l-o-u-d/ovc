@@ -17,7 +17,7 @@ pub const OC_BIN_DIR: &str = ".local/bin/oc_bins";
 /// by the OpenShift mirror for that platform's binaries.
 #[derive(Debug, Clone)]
 pub struct Platform {
-    /// Human-readable platform name (e.g., "linux-x86_64")
+    /// Human-readable platform name (e.g. "linux-x86_64")
     pub name: &'static str,
     /// Mirror subdirectory path for this platform
     pub mirror_path: &'static str,
@@ -82,7 +82,7 @@ impl Platform {
     /// Build the download URL for a specific version on this platform
     ///
     /// # Arguments
-    /// * `version` - The OpenShift version to download (e.g., "4.19.0")
+    /// * `version` - The OpenShift version to download (e.g. "4.19.0")
     ///
     /// # Returns
     /// Complete URL to download the specified version for this platform
