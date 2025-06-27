@@ -7,7 +7,7 @@ on:
   workflow_call:
 
 jobs:
-  download:
+  publish:
     name: Download Artifacts
     runs-on: ubuntu-latest
     steps:
@@ -15,22 +15,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: ovc-*
-  debug:
-    name: Debug
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug
-        run: |
-          ls -la
-          ls -la ovc-*
-  publish:
-    name: Publish Release
-    runs-on: ubuntu-latest
-    steps:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ovc-linux-x86_64
-            ovc-macos-arm64
-            ovc-macos-x86_64
+            ovc-*
