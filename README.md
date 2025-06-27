@@ -16,6 +16,10 @@ A command-line tool for managing OpenShift 4 client versions.
     chmod +x ~/Downloads/ovc-*
     mv ~/Downloads/ovc-* ~/.local/bin/ovc
     ```
+    macOS users need to add an exception to bypass Gatekeeper
+    ```bash
+    xattr -d com.apple.quarantine ~/.local/bin/ovc
+    ```
 
 ## Examples
 
