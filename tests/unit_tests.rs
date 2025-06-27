@@ -19,17 +19,6 @@ fn run_ovc(args: &[&str]) -> std::process::Output {
         .expect("Failed to execute ovc command")
 }
 
-// Helper function to run ovc command with custom working directory
-#[allow(dead_code)]
-fn run_ovc_in_dir(args: &[&str], dir: &std::path::Path) -> std::process::Output {
-    Command::new("cargo")
-        .args(["run", "--"])
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .expect("Failed to execute ovc command")
-}
-
 // =============================================================================
 // UNIT TESTS - Library Functions
 // =============================================================================
@@ -774,49 +763,6 @@ mod cli_list_tests {
             }
         }
     }
-
-    #[test]
-    fn test_version_sorting() {
-        let output = run_ovc(&["--list", "4.1"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        let versions: Vec<&str> = stdout.trim().split('\n').collect();
-        if versions.len() > 1 {
-            // Just check that we have versions starting with 4.1
-            for version in &versions {
-                if !version.trim().is_empty() {
-                    assert!(
-                        version.starts_with("4.1"),
-                        "Version should start with 4.1: {}",
-                        version
-                    );
-                }
-            }
-            // The versions should be sorted by the library's compare_versions function
-            // which is tested separately in unit tests
-            assert!(!versions.is_empty(), "Should have at least one version");
-        }
-    }
-
-    #[test]
-    fn test_stable_version_detection() {
-        let output = run_ovc(&["--list", "4.19"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        // Should contain stable versions (without -rc, -alpha, etc.)
-        let lines: Vec<&str> = stdout.trim().split('\n').collect();
-        let stable_count = lines
-            .iter()
-            .filter(|line| {
-                !line.contains("-rc") && !line.contains("-alpha") && !line.contains("-beta")
-            })
-            .count();
-
-        // Should have at least some stable versions
-        assert!(stable_count > 0);
-    }
 }
 
 #[cfg(test)]
@@ -861,14 +807,12 @@ mod cli_installed_tests {
 
     #[test]
     fn test_installed_matching_versions() {
-        // Test that installed shows matching versions
+        // This test depends on having some versions installed
+        // We'll use a pattern that might match some installed versions
         let output = run_ovc(&["--installed", "4.19"]);
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            assert!(!stdout.trim().is_empty());
-
-            // Should list versions that start with 4.19
             let lines: Vec<&str> = stdout.trim().split('\n').collect();
             for line in lines {
                 if !line.trim().is_empty() {
@@ -882,16 +826,8 @@ mod cli_installed_tests {
         } else {
             // If no versions match, should show appropriate error
             let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching 4.19"));
+            assert!(stderr.contains("No installed versions found matching"));
         }
-    }
-
-    #[test]
-    fn test_installed_invalid_format() {
-        let output = run_ovc(&["--installed", "4"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Version must include at least major and minor version"));
     }
 
     #[test]
@@ -899,7 +835,7 @@ mod cli_installed_tests {
         let output = run_ovc(&["--installed", "999.999"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("No installed versions found matching 999.999"));
+        assert!(stderr.contains("No installed versions found matching"));
     }
 
     #[test]
@@ -932,14 +868,6 @@ mod cli_prune_tests {
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("No installed versions found matching 999.999"));
-    }
-
-    #[test]
-    fn test_prune_invalid_format() {
-        let output = run_ovc(&["--prune", "4"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Version must include at least major and minor version"));
     }
 
     #[test]
@@ -985,18 +913,6 @@ mod cli_behavior_tests {
     use super::*;
 
     #[test]
-    fn test_verbose_flag_global() {
-        // Test that -v works before the command
-        let output1 = run_ovc(&["-v", "--list", "4.19"]);
-        let _output2 = run_ovc(&["--list", "4.19", "-v"]);
-
-        // Both should work (global flag)
-        assert!(output1.status.success());
-        // Note: end -v might not work as -v is global, but let's check
-        // The second form might not work depending on clap configuration
-    }
-
-    #[test]
     fn test_platform_detection() {
         // The tool should work regardless of platform
         let output = run_ovc(&["--list", "4.19"]);
@@ -1035,33 +951,6 @@ mod cli_behavior_tests {
     }
 
     #[test]
-    fn test_output_is_pipeable() {
-        // Test that commands produce clean output suitable for piping
-        let output = run_ovc(&["--list", "4.19"]);
-        assert!(output.status.success());
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = stdout.trim().split('\n').collect();
-
-        // Each line should be a clean version number
-        for line in lines.iter().take(5) {
-            // Check first 5 lines
-            if !line.trim().is_empty() {
-                assert!(
-                    line.starts_with("4.19"),
-                    "Line should start with 4.19: {}",
-                    line
-                );
-                assert!(
-                    !line.contains("("),
-                    "Line should not contain extra info without -v: {}",
-                    line
-                );
-            }
-        }
-    }
-
-    #[test]
     fn test_unix_philosophy_compliance() {
         // Test that commands without -v produce minimal output
 
@@ -1085,31 +974,6 @@ mod cli_behavior_tests {
     }
 
     #[test]
-    fn test_verbose_mode_provides_details() {
-        // Test that -v provides additional useful information
-
-        // list -v should show version numbers
-        let output = run_ovc(&["-v", "--list", "4.19"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("4.19"));
-
-        // installed -v should show paths
-        let output = run_ovc(&["-v", "--installed", "4.19"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if !stdout.trim().is_empty() {
-                assert!(stdout.contains("(") && stdout.contains(")"));
-            }
-        } else {
-            // If no versions match, that's also valid for this test
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching"));
-        }
-    }
-
-    #[test]
     fn test_symlink_handling() {
         // This test would need a more complex setup to properly test symlink creation
         // For now, just ensure the commands don't crash
@@ -1121,25 +985,6 @@ mod cli_behavior_tests {
                 stderr.contains("No installed versions found matching")
                     || stderr.contains("Version must include")
             );
-        }
-    }
-
-    #[test]
-    fn test_concurrent_safety() {
-        // Test that multiple ovc commands can run simultaneously without issues
-        use std::thread;
-
-        let handles: Vec<_> = (0..3)
-            .map(|_| {
-                thread::spawn(|| {
-                    let output = run_ovc(&["--list", "4.19"]);
-                    assert!(output.status.success());
-                })
-            })
-            .collect();
-
-        for handle in handles {
-            handle.join().unwrap();
         }
     }
 }

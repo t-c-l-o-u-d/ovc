@@ -19,52 +19,21 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use chrono::{DateTime, Duration, Utc};
 use clap::Parser;
 use flate2::read::GzDecoder;
 use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
 
 use tar::Archive;
 
 // Import from library
 use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version};
 
-/// Cache structure for storing version information with timestamp
-///
-/// This structure is used to cache the list of available versions from the
-/// OpenShift mirror to avoid repeated network requests. The cache expires
-/// after 1 hour to ensure reasonably fresh data.
-#[derive(Serialize, Deserialize)]
-struct VersionCache {
-    /// List of available versions
-    versions: Vec<String>,
-    /// Timestamp when the cache was created
-    timestamp: DateTime<Utc>,
-}
-
-impl VersionCache {
-    /// Create a new version cache with current timestamp
-    ///
-    /// # Arguments
-    /// * `versions` - Vector of version strings to cache
-    fn new(versions: Vec<String>) -> Self {
-        Self {
-            versions,
-            timestamp: Utc::now(),
-        }
-    }
-
-    /// Check if the cache has expired (older than 1 hour)
-    ///
-    /// # Returns
-    /// `true` if the cache is expired and should be refreshed
-    fn is_expired(&self) -> bool {
-        let now = Utc::now();
-        let age = now.signed_duration_since(self.timestamp);
-        age > Duration::hours(1)
-    }
-}
+// Import cache functionality
+mod cache;
+use cache::{
+    load_cached_versions, update_cache_for_missing_version, get_available_versions,
+    get_available_versions_with_verbose, version_exists_in_cache,
+};
 
 /// Command line interface structure
 #[derive(Parser)]
@@ -134,76 +103,6 @@ fn main() {
 }
 
 // =============================================================================
-// Cache Management Functions
-// =============================================================================
-
-/// Get the cache directory path, creating it if it doesn't exist
-///
-/// Creates the ~/.cache/ovc directory structure for storing cached data.
-///
-/// # Returns
-/// Path to the cache directory
-///
-/// # Errors
-/// Returns error if home directory cannot be found or directory creation fails
-fn get_cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let cache_dir = dirs::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".cache")
-        .join("ovc");
-    fs::create_dir_all(&cache_dir)?;
-    Ok(cache_dir)
-}
-
-/// Get the full path to the version cache file
-///
-/// # Returns
-/// Path to the versions.json cache file
-fn get_cache_file_path() -> Result<PathBuf, Box<dyn Error>> {
-    Ok(get_cache_dir()?.join("versions.json"))
-}
-
-/// Load cached version data if it exists and is not expired
-///
-/// Attempts to load the version cache from disk. If the cache file doesn't exist
-/// or has expired, returns None. Expired cache files are automatically removed.
-///
-/// # Returns
-/// `Some(VersionCache)` if valid cache exists, `None` otherwise
-fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
-    let cache_file = get_cache_file_path()?;
-
-    if !cache_file.exists() {
-        return Ok(None);
-    }
-
-    let content = fs::read_to_string(&cache_file)?;
-    let cache: VersionCache = serde_json::from_str(&content)?;
-
-    if cache.is_expired() {
-        // Remove expired cache file
-        let _ = fs::remove_file(&cache_file);
-        return Ok(None);
-    }
-
-    Ok(Some(cache))
-}
-
-/// Save version data to cache for future use
-///
-/// Serializes the version list with current timestamp and saves to cache file.
-///
-/// # Arguments
-/// * `versions` - List of version strings to cache
-fn save_cached_versions(versions: &[String]) -> Result<(), Box<dyn Error>> {
-    let cache_file = get_cache_file_path()?;
-    let cache = VersionCache::new(versions.to_vec());
-    let content = serde_json::to_string_pretty(&cache)?;
-    fs::write(&cache_file, content)?;
-    Ok(())
-}
-
-// =============================================================================
 // Command Implementation Functions
 // =============================================================================
 
@@ -223,6 +122,11 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
         Some(v) => v,
         None => get_latest_version()?,
     };
+
+    // Check for existing oc binary in PATH before proceeding
+    if let Some(existing_oc_path) = check_existing_oc_in_path()? {
+        return Err(format!("Error: Existing oc binary found in ${{PATH}}: {}", existing_oc_path.display()).into());
+    }
 
     // Auto-detect platform
     let platform = Platform::detect();
@@ -259,7 +163,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
 
     // Only show warnings in verbose mode
     if verbose {
-        check_path_warnings()?;
+        check_path_warnings(verbose)?;
     }
 
     Ok(())
@@ -395,7 +299,10 @@ fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error
 /// - ~/.local/bin is not in the user's PATH
 ///
 /// This helps users understand why the oc command might not be available.
-fn check_path_warnings() -> Result<(), Box<dyn Error>> {
+///
+/// # Arguments
+/// * `verbose` - Whether to show debug information about PATH detection
+fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
     let local_bin = dirs::home_dir()
         .ok_or("Could not find home directory")?
         .join(".local/bin");
@@ -404,18 +311,40 @@ fn check_path_warnings() -> Result<(), Box<dyn Error>> {
     // Check if oc binary exists in ~/.local/bin
     if !oc_symlink.exists() {
         eprintln!("Warning: oc binary not found in ~/.local/bin");
-        eprintln!("Run 'ovc download' to install a version and set it as default");
+        eprintln!("Run 'ovc [VERSION]' to install a version and set it as default");
         return Ok(());
     }
 
     // Check if ~/.local/bin is in PATH
     if let Ok(path_var) = std::env::var("PATH") {
-        let local_bin_str = local_bin.to_string_lossy();
-        let is_in_path = path_var.split(':').any(|p| p == local_bin_str);
+        let local_bin_canonical = match local_bin.canonicalize() {
+            Ok(path) => path,
+            Err(_) => local_bin.clone(), // fallback to original path if canonicalize fails
+        };
+        
+        let is_in_path = path_var.split(':').any(|p| {
+            if p.is_empty() {
+                return false;
+            }
+            
+            // Try to canonicalize the PATH entry for comparison
+            let path_entry = Path::new(p);
+            if let Ok(canonical_entry) = path_entry.canonicalize() {
+                canonical_entry == local_bin_canonical
+            } else {
+                // Fallback to string comparison if canonicalization fails
+                let path_buf = Path::new(p).to_path_buf();
+                path_buf == local_bin
+            }
+        });
 
-        if !is_in_path {
-            eprintln!("Warning: ~/.local/bin is not in your PATH");
+        if !is_in_path && verbose {
+            eprintln!("Warning: ~/.local/bin is not in your ${{PATH}}");
+            eprintln!(" Add the following line to your shell profile (~/.bashrc, ~/.zshrc, etc.):");
+            eprintln!(" export PATH=\"${{PATH}}:${{HOME}}/.local/bin\"");
         }
+    } else {
+        eprintln!("Warning: Could not read $PATH environment variable");
     }
 
     Ok(())
@@ -429,7 +358,7 @@ fn check_path_warnings() -> Result<(), Box<dyn Error>> {
 ///
 /// Takes a version like "4.19" and resolves it to the latest available
 /// patch version like "4.19.3". If the input is already a full version,
-/// returns it unchanged.
+/// returns it unchanged. Updates cache if no matching version is found.
 ///
 /// # Arguments
 /// * `input_version` - Version string to resolve (e.g., "4.19" or "4.19.0")
@@ -449,13 +378,21 @@ fn resolve_version(input_version: &str) -> Result<String, Box<dyn Error>> {
     }
 
     // It's a partial version (major.minor), find the latest patch version
-    let available_versions = get_available_versions()?;
+    let mut available_versions = get_available_versions()?;
 
     if let Some(latest_patch) = find_matching_version(input_version, &available_versions) {
-        Ok(latest_patch)
-    } else {
-        Err(format!("No versions found matching {}", input_version).into())
+        return Ok(latest_patch);
     }
+
+    // No matching version found, try updating cache and search again
+    if update_cache_for_missing_version(input_version, false)? {
+        available_versions = get_available_versions()?;
+        if let Some(latest_patch) = find_matching_version(input_version, &available_versions) {
+            return Ok(latest_patch);
+        }
+    }
+
+    Err(format!("No versions found matching {}", input_version).into())
 }
 
 /// Get the latest stable version available
@@ -488,6 +425,7 @@ fn get_latest_version() -> Result<String, Box<dyn Error>> {
 ///
 /// Checks if the binary already exists locally. If not, downloads and extracts it.
 /// Returns information about the binary path and whether a download occurred.
+/// Uses cached URLs when available to avoid rebuilding URLs.
 ///
 /// # Arguments
 /// * `version` - Version to ensure is available
@@ -503,13 +441,26 @@ fn ensure_oc_binary_with_platform(
 ) -> Result<(PathBuf, bool, String), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(platform)?;
     let oc_path = bin_dir.join(format!("oc-{}", version));
-    let download_url = platform.build_download_url(version);
+    
+    // Try to get URL from cache first, fallback to building it
+    let download_url = if let Some(cache) = load_cached_versions()? {
+        cache.get_download_url(version, platform.name)
+            .unwrap_or_else(|| platform.build_download_url(version))
+    } else {
+        platform.build_download_url(version)
+    };
 
     if oc_path.exists() {
         return Ok((oc_path, false, download_url)); // false = no download performed
     }
 
-    if !version_exists_on_mirror(version, platform)? {
+    // Check if version exists, preferring cache lookup with update if missing
+    let version_exists = match version_exists_in_cache(version, platform, true)? {
+        Some(exists) => exists,
+        None => version_exists_on_mirror(version, platform)?,
+    };
+
+    if !version_exists {
         return Err(format!(
             "Version '{}' not found for platform {}",
             version, platform.name
@@ -520,7 +471,7 @@ fn ensure_oc_binary_with_platform(
     if verbose {
         eprintln!("Downloading from: {}", download_url);
     }
-    download_and_extract(version, &oc_path, platform)?;
+    download_and_extract_with_url(version, &oc_path, &download_url)?;
     Ok((oc_path, true, download_url)) // true = download performed
 }
 
@@ -550,23 +501,22 @@ fn get_bin_dir_with_platform(platform: &Platform) -> Result<PathBuf, Box<dyn Err
 
 /// Download and extract the OpenShift client binary
 ///
-/// Downloads the tar.gz archive from the OpenShift mirror, extracts the
+/// Downloads the tar.gz archive from the specified URL, extracts the
 /// oc binary, and sets appropriate file permissions.
 ///
 /// # Arguments
-/// * `version` - Version being downloaded
+/// * `_version` - Version being downloaded (for error messages, currently unused)
 /// * `oc_path` - Target path for the extracted binary
-/// * `platform` - Platform information for building download URL
-fn download_and_extract(
-    version: &str,
+/// * `download_url` - URL to download the binary from
+fn download_and_extract_with_url(
+    _version: &str,
     oc_path: &PathBuf,
-    platform: &Platform,
+    download_url: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let url = platform.build_download_url(version);
-    let resp = Client::new().get(&url).send()?;
+    let resp = Client::new().get(download_url).send()?;
 
     if !resp.status().is_success() {
-        return Err(format!("Failed to download: {}", url).into());
+        return Err(format!("Failed to download: {}", download_url).into());
     }
 
     let tar_gz = GzDecoder::new(resp);
@@ -586,8 +536,7 @@ fn download_and_extract(
     Err("oc binary not found in archive".into())
 }
 
-/// Set executable permissions on a file (Unix only)
-#[cfg(unix)]
+/// Set executable permissions on a file
 fn set_executable(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
@@ -622,7 +571,7 @@ fn list_installed_versions() -> Result<Vec<String>, Box<dyn Error>> {
 
 /// Check if a version exists on the OpenShift mirror
 ///
-/// Performs a HEAD request to check if the download URL returns a successful response.
+/// First checks the cache for the version URL, then falls back to HTTP request.
 ///
 /// # Arguments
 /// * `version` - Version to check
@@ -631,161 +580,52 @@ fn list_installed_versions() -> Result<Vec<String>, Box<dyn Error>> {
 /// # Returns
 /// `true` if the version exists on the mirror
 fn version_exists_on_mirror(version: &str, platform: &Platform) -> Result<bool, Box<dyn Error>> {
+    // Try to get URL from cache first
+    if let Some(cache) = load_cached_versions()? {
+        if let Some(url) = cache.get_download_url(version, platform.name) {
+            let resp = Client::new().head(&url).send()?;
+            return Ok(resp.status().is_success());
+        }
+    }
+
+    // Fallback to building URL and checking
     let url = platform.build_download_url(version);
     let resp = Client::new().head(&url).send()?;
     Ok(resp.status().is_success())
 }
 
-// =============================================================================
-// Version Fetching and Caching Functions
-// =============================================================================
-
-/// Get available versions without verbose output
-fn get_available_versions() -> Result<Vec<String>, Box<dyn Error>> {
-    get_available_versions_with_verbose(false)
-}
-
-/// Get available versions from the OpenShift mirror with optional verbose output
-///
-/// First attempts to load from cache. If cache is missing or expired,
-/// fetches fresh data from the mirror and updates the cache.
-///
-/// # Arguments
-/// * `verbose` - Whether to show cache status and fetch progress
-///
-/// # Returns
-/// Vector of available version strings sorted by semantic version
-fn get_available_versions_with_verbose(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
-    // Try to load from cache first
-    if let Some(cache) = load_cached_versions()? {
-        if verbose {
-            eprintln!(
-                "Using cached versions (expires in {})",
-                format_cache_expiry(&cache.timestamp)
-            );
-        }
-        return Ok(cache.versions);
-    }
-
-    if verbose {
-        eprintln!("Fetching versions from API...");
-    }
-
-    // Cache miss or expired, fetch from API
-    let platform = Platform::detect();
-    let url = platform.build_versions_url();
-    let resp = Client::new().get(&url).send()?;
-    let body = resp.text()?;
-
-    let mut versions = vec![];
-    for line in body.lines() {
-        if let Some(ver) = line.split('"').nth(1) {
-            if ver.ends_with('/') && ver.chars().next().unwrap().is_ascii_digit() {
-                versions.push(ver.trim_end_matches('/').to_string());
-            }
-        }
-    }
-
-    versions.sort_by(|a, b| compare_versions(a, b));
-
-    // Save to cache for future use
-    if let Err(e) = save_cached_versions(&versions) {
-        // Don't fail the operation if caching fails, just log it in verbose mode
-        if verbose {
-            eprintln!("Warning: Failed to cache versions: {}", e);
-        }
-    } else if verbose {
-        eprintln!("Cached {} versions for 1 hour", versions.len());
-    }
-
-    Ok(versions)
-}
-
-/// Format cache expiry time in human-readable format
-///
-/// Shows remaining time until cache expires in minutes or seconds.
-///
-/// # Arguments
-/// * `timestamp` - Cache creation timestamp
-///
-/// # Returns
-/// Human-readable time remaining (e.g., "45m" or "30s")
-fn format_cache_expiry(timestamp: &DateTime<Utc>) -> String {
-    let now = Utc::now();
-    let expires_at = *timestamp + Duration::hours(1);
-    let remaining = expires_at.signed_duration_since(now);
-
-    if remaining.num_minutes() > 0 {
-        format!("{}m", remaining.num_minutes())
-    } else {
-        format!("{}s", remaining.num_seconds().max(0))
-    }
-}
-
-// =============================================================================
-// Symlink Management Functions
-// =============================================================================
-
 /// Set a specific version as the default OpenShift client
-///
-/// Creates symlinks in ~/.local/bin pointing to the specified version.
-/// Creates both 'oc' and 'kubectl' symlinks for compatibility.
-///
-/// # Arguments
-/// * `version` - Version to set as default
-/// * `platform` - Platform information
 fn set_default_oc_with_platform(version: &str, platform: &Platform) -> Result<(), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(platform)?;
     let oc_path = bin_dir.join(format!("oc-{}", version));
 
+    // Ensure the binary exists (download if needed)
     if !oc_path.exists() {
         let (_, _, _) = ensure_oc_binary_with_platform(version, platform, false)?;
     }
 
+    // Create ~/.local/bin directory and symlinks
     let local_bin = dirs::home_dir()
         .ok_or("Could not find home directory")?
         .join(".local/bin");
     fs::create_dir_all(&local_bin)?;
 
-    create_symlinks(&oc_path, &local_bin)?;
-    Ok(())
-}
-
-/// Create symlinks for both oc and kubectl commands
-///
-/// Removes any existing symlinks and creates fresh ones pointing to the
-/// specified binary. This ensures both 'oc' and 'kubectl' commands work.
-///
-/// # Arguments
-/// * `oc_path` - Path to the target oc binary
-/// * `local_bin` - Directory to create symlinks in
-fn create_symlinks(oc_path: &Path, local_bin: &Path) -> Result<(), Box<dyn Error>> {
+    // Create symlinks (binary existence is already guaranteed above)
     let symlink_oc = local_bin.join("oc");
     let symlink_kubectl = local_bin.join("kubectl");
-
-    // Ensure the target binary exists before creating symlinks
-    if !oc_path.exists() {
-        return Err(format!("Target binary does not exist: {}", oc_path.display()).into());
-    }
 
     // Remove existing symlinks (including broken ones)
     remove_if_exists(&symlink_oc)?;
     remove_if_exists(&symlink_kubectl)?;
 
     // Create new symlinks
-    create_symlink(oc_path, &symlink_oc)?;
-    create_symlink(oc_path, &symlink_kubectl)?;
+    create_symlink(&oc_path, &symlink_oc)?;
+    create_symlink(&oc_path, &symlink_kubectl)?;
 
     Ok(())
 }
 
 /// Remove a file or symlink if it exists
-///
-/// Safely removes files, directories, or symlinks (including broken ones).
-/// Does nothing if the path doesn't exist.
-///
-/// # Arguments
-/// * `path` - Path to remove
 fn remove_if_exists(path: &Path) -> Result<(), Box<dyn Error>> {
     // Check if the path exists as a file, directory, or symlink (including broken symlinks)
     if path.exists() || path.is_symlink() {
@@ -800,8 +640,7 @@ fn remove_if_exists(path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Create a symlink (Unix implementation)
-#[cfg(unix)]
+/// Create a symlink
 fn create_symlink(target: &Path, link: &Path) -> Result<(), Box<dyn Error>> {
     std::os::unix::fs::symlink(target, link).map_err(|e| {
         format!(
@@ -812,4 +651,28 @@ fn create_symlink(target: &Path, link: &Path) -> Result<(), Box<dyn Error>> {
         )
     })?;
     Ok(())
+}
+
+/// Check for existing oc binary in PATH using the which crate
+/// Ignores the oc binary in ~/.local/bin since that's managed by ovc itself.
+/// # Returns: `Some(path)` if an oc binary is found in PATH (excluding ~/.local/bin), `None` otherwise
+fn check_existing_oc_in_path() -> Result<Option<PathBuf>, Box<dyn Error>> {
+    match which::which("oc") {
+        Ok(path) => {
+            // Get the ~/.local/bin directory to exclude it from conflicts
+            let local_bin = dirs::home_dir()
+                .ok_or("Could not find home directory")?
+                .join(".local/bin");
+            
+            // If the found oc binary is in ~/.local/bin, ignore it (managed by ovc)
+            if let Some(parent) = path.parent() {
+                if parent == local_bin {
+                    return Ok(None);
+                }
+            }
+            
+            Ok(Some(path))
+        }
+        Err(_) => Ok(None), // oc not found in PATH
+    }
 }
