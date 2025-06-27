@@ -17,6 +17,9 @@ jobs:
           name: ovc-*
   publish:
     name: Publish Release
-    uses: softprops/action-gh-release@v2
-    with:
-        files: ovc-*
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ovc-*
