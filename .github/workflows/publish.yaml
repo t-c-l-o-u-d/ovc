@@ -6,6 +6,9 @@ name: Publish
 on:
   workflow_call:
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     name: Download Artifacts
