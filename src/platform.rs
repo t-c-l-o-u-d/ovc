@@ -105,4 +105,4 @@ impl Platform {
     pub fn build_versions_url(&self) -> String {
         format!("{}/{}/clients/ocp/", OC_MIRROR_BASE, self.mirror_path)
     }
-} 
+}

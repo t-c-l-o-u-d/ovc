@@ -10,8 +10,8 @@ pub mod platform;
 pub mod version;
 
 // Re-export commonly used items at the crate root for convenience
-pub use platform::{Platform, OC_BIN_DIR, OC_MIRROR_BASE};
+pub use platform::{OC_BIN_DIR, OC_MIRROR_BASE, Platform};
 pub use version::{
-    compare_versions, extract_major_minor, extract_version_number, 
-    extract_version_from_path, find_matching_version, is_stable_version
-}; 
+    compare_versions, extract_major_minor, extract_version_from_path, extract_version_number,
+    find_matching_version, is_stable_version,
+};
