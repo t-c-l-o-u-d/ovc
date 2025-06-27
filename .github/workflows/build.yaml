@@ -33,7 +33,6 @@ jobs:
         - name: Prepare Binary
           run: |
             cp target/release/ovc ovc-${{ inputs.arch }}
-            chmod +x ovc-${{ inputs.arch }}
         
         - name: Upload Binary Artifact
           uses: actions/upload-artifact@v4
