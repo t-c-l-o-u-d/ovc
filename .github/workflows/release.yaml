@@ -24,7 +24,6 @@ jobs:
     name: Build Binaries
     needs: [security]
     strategy:
-      fail-fast: false
       matrix:
         include:
           - arch: "linux-x86_64"
