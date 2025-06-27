@@ -31,8 +31,8 @@ use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stab
 // Import cache functionality
 mod cache;
 use cache::{
-    load_cached_versions, update_cache_for_missing_version, get_available_versions,
-    get_available_versions_with_verbose, version_exists_in_cache,
+    get_available_versions, get_available_versions_with_verbose, load_cached_versions,
+    update_cache_for_missing_version, version_exists_in_cache,
 };
 
 /// Command line interface structure
@@ -91,7 +91,6 @@ fn main() {
         match cli.target_version {
             Some(version) => cmd_download(Some(version), cli.verbose),
             None => Err("ovc: missing version\nTry 'ovc --help' for more information.".into()),
-            
         }
     };
 
@@ -125,7 +124,11 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
 
     // Check for existing oc binary in PATH before proceeding
     if let Some(existing_oc_path) = check_existing_oc_in_path()? {
-        return Err(format!("Error: Existing oc binary found in ${{PATH}}: {}", existing_oc_path.display()).into());
+        return Err(format!(
+            "Error: Existing oc binary found in ${{PATH}}: {}",
+            existing_oc_path.display()
+        )
+        .into());
     }
 
     // Auto-detect platform
@@ -321,12 +324,12 @@ fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
             Ok(path) => path,
             Err(_) => local_bin.clone(), // fallback to original path if canonicalize fails
         };
-        
+
         let is_in_path = path_var.split(':').any(|p| {
             if p.is_empty() {
                 return false;
             }
-            
+
             // Try to canonicalize the PATH entry for comparison
             let path_entry = Path::new(p);
             if let Ok(canonical_entry) = path_entry.canonicalize() {
@@ -441,10 +444,11 @@ fn ensure_oc_binary_with_platform(
 ) -> Result<(PathBuf, bool, String), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(platform)?;
     let oc_path = bin_dir.join(format!("oc-{}", version));
-    
+
     // Try to get URL from cache first, fallback to building it
     let download_url = if let Some(cache) = load_cached_versions()? {
-        cache.get_download_url(version, platform.name)
+        cache
+            .get_download_url(version, platform.name)
             .unwrap_or_else(|| platform.build_download_url(version))
     } else {
         platform.build_download_url(version)
@@ -663,14 +667,14 @@ fn check_existing_oc_in_path() -> Result<Option<PathBuf>, Box<dyn Error>> {
             let local_bin = dirs::home_dir()
                 .ok_or("Could not find home directory")?
                 .join(".local/bin");
-            
+
             // If the found oc binary is in ~/.local/bin, ignore it (managed by ovc)
             if let Some(parent) = path.parent() {
                 if parent == local_bin {
                     return Ok(None);
                 }
             }
-            
+
             Ok(Some(path))
         }
         Err(_) => Ok(None), // oc not found in PATH

@@ -144,12 +144,12 @@ pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
     }
 
     let content = fs::read_to_string(&cache_file)?;
-    
+
     // Try to load new format first
     if let Ok(cache) = serde_json::from_str::<VersionCache>(&content) {
         return Ok(Some(cache));
     }
-    
+
     // Try to load legacy format and migrate
     if let Ok(legacy_cache) = serde_json::from_str::<LegacyVersionCache>(&content) {
         // Migrate to new format
@@ -158,15 +158,15 @@ pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
             versions: version_info,
             timestamp: legacy_cache.timestamp,
         };
-        
+
         // Save the migrated cache
         if let Err(_) = save_cached_versions(&new_cache.versions) {
             // If saving fails, just continue with the migrated data
         }
-        
+
         return Ok(Some(new_cache));
     }
-    
+
     // If neither format works, remove the corrupted cache file
     let _ = fs::remove_file(&cache_file);
     Ok(None)
@@ -265,7 +265,10 @@ pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dy
 ///
 /// # Returns
 /// `true` if cache was updated, `false` if version was already in cache
-pub fn update_cache_for_missing_version(missing_version: &str, verbose: bool) -> Result<bool, Box<dyn Error>> {
+pub fn update_cache_for_missing_version(
+    missing_version: &str,
+    verbose: bool,
+) -> Result<bool, Box<dyn Error>> {
     // Check if the version is already in cache (might have been added by another process)
     if let Some(cache) = load_cached_versions()? {
         if cache.has_version(missing_version) {
@@ -274,7 +277,10 @@ pub fn update_cache_for_missing_version(missing_version: &str, verbose: bool) ->
     }
 
     if verbose {
-        eprintln!("Version {} not found in cache, updating from API...", missing_version);
+        eprintln!(
+            "Version {} not found in cache, updating from API...",
+            missing_version
+        );
     }
 
     // Fetch fresh data and update cache
@@ -316,22 +322,28 @@ pub fn format_cache_age(timestamp: &DateTime<Utc>) -> String {
 ///
 /// # Returns
 /// `Some(true)` if found, `Some(false)` if not found after cache update, `None` if cache unavailable
-pub fn version_exists_in_cache(version: &str, platform: &Platform, update_if_missing: bool) -> Result<Option<bool>, Box<dyn Error>> {
+pub fn version_exists_in_cache(
+    version: &str,
+    platform: &Platform,
+    update_if_missing: bool,
+) -> Result<Option<bool>, Box<dyn Error>> {
     if let Some(cache) = load_cached_versions()? {
         let exists = cache.get_download_url(version, platform.name).is_some();
         if exists || !update_if_missing {
             return Ok(Some(exists));
         }
-        
+
         // Version not found and we should update cache
         if update_cache_for_missing_version(version, false)? {
             // Check again after cache update
             if let Some(updated_cache) = load_cached_versions()? {
-                let exists_after_update = updated_cache.get_download_url(version, platform.name).is_some();
+                let exists_after_update = updated_cache
+                    .get_download_url(version, platform.name)
+                    .is_some();
                 return Ok(Some(exists_after_update));
             }
         }
-        
+
         Ok(Some(false))
     } else {
         Ok(None)
@@ -371,4 +383,4 @@ pub fn get_available_versions_with_verbose(verbose: bool) -> Result<Vec<String>,
 
     // No cache exists, fetch from API and create initial cache
     fetch_and_cache_all_versions(verbose)
-} 
+}

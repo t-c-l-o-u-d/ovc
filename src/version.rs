@@ -221,4 +221,4 @@ pub fn find_matching_version(
     // Sort and return the latest matching version
     candidates.sort_by(|a, b| compare_versions(a, b));
     candidates.last().cloned()
-} 
+}
