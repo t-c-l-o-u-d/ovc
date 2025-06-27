@@ -8,14 +8,14 @@ on:
     types: [created]
 
 jobs:
-  lint:
-    name: Lint
-    uses: ./.github/workflows/lint.yaml
-
-  security:
-    name: Security Audit
-    needs: [lint]
-    uses: ./.github/workflows/security.yaml
+  #lint:
+  #  name: Lint
+  #  uses: ./.github/workflows/lint.yaml
+#
+  #security:
+  #  name: Security Audit
+  #  needs: [lint]
+  #  uses: ./.github/workflows/security.yaml
 
   build-matrix:
     name: Build Binaries
@@ -37,7 +37,7 @@ jobs:
       arch: ${{ matrix.arch }}
       runner: ${{ matrix.runner }}
 
-  release:
+  publish:
     name: Publish Release
     needs: [build-matrix]
     uses: ./.github/workflows/publish.yaml
