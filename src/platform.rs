@@ -73,7 +73,7 @@ impl Platform {
             ("macos", "aarch64" | "arm64") => Self::MAC_ARM64,
             // Default fallbacks for known OS with unknown architecture
             ("linux", _) => Self::LINUX_X86_64,
-            ("macos", _) => Self::MAC_X86_64,
+            ("macos", _) => Self::MAC_ARM64,
             // Ultimate fallback for unknown OS
             _ => Self::LINUX_X86_64,
         }
