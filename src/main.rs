@@ -125,7 +125,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
     // Check for existing oc binary in PATH before proceeding
     if let Some(existing_oc_path) = check_existing_oc_in_path()? {
         return Err(format!(
-            "Error: Existing oc binary found in ${{PATH}}: {}",
+            "Error: Remove the existing oc binary found in ${{PATH}}: {}",
             existing_oc_path.display()
         )
         .into());
@@ -178,13 +178,13 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
 /// In verbose mode, also shows the full path to each binary.
 ///
 /// # Arguments
-/// * `version_pattern` - Version pattern to match (e.g., "4.19")
+/// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show full paths
 fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
-        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
+        return Err("Version must include at least major and minor version (e.g. 4.19)".into());
     }
 
     let all_versions = list_installed_versions()?;
@@ -216,13 +216,13 @@ fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<
 /// matching the given pattern. Uses caching to improve performance.
 ///
 /// # Arguments
-/// * `version_pattern` - Version pattern to match (e.g., "4.19")
+/// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show cache status and other details
 fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
-        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
+        return Err("Version must include at least major and minor version (e.g. 4.19)".into());
     }
 
     let all_versions = get_available_versions_with_verbose(verbose)?;
@@ -249,13 +249,13 @@ fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<
 /// removed, and then removes the binary files.
 ///
 /// # Arguments
-/// * `version_pattern` - Version pattern to match (e.g., "4.19")
+/// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show detailed removal progress
 fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
-        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
+        return Err("Version must include at least major and minor version (e.g. 4.19)".into());
     }
 
     let installed_versions = list_installed_versions()?;
@@ -342,9 +342,7 @@ fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
         });
 
         if !is_in_path && verbose {
-            eprintln!("Warning: ~/.local/bin is not in your ${{PATH}}");
-            eprintln!(" Add the following line to your shell profile (~/.bashrc, ~/.zshrc, etc.):");
-            eprintln!(" export PATH=\"${{PATH}}:${{HOME}}/.local/bin\"");
+            eprintln!("Warning: ~/.local/bin is not in your ${{PATH}}")
         }
     } else {
         eprintln!("Warning: Could not read $PATH environment variable");
@@ -364,15 +362,15 @@ fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
 /// returns it unchanged. Updates cache if no matching version is found.
 ///
 /// # Arguments
-/// * `input_version` - Version string to resolve (e.g., "4.19" or "4.19.0")
+/// * `input_version` - Version string to resolve (e.g. "4.19" or "4.19.0")
 ///
 /// # Returns
-/// Full version string (e.g., "4.19.3")
+/// Full version string (e.g. "4.19.3")
 fn resolve_version(input_version: &str) -> Result<String, Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = input_version.split('.').collect();
     if parts.len() < 2 {
-        return Err("Version must include at least major and minor version (e.g., 4.19)".into());
+        return Err("Version must include at least major and minor version (e.g. 4.19)".into());
     }
 
     // Check if it's already a full version (has patch number)

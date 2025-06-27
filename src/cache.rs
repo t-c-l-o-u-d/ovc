@@ -19,7 +19,7 @@ use ovc::{Platform, compare_versions};
 /// Version information with download URLs for all platforms
 #[derive(Serialize, Deserialize, Clone)]
 pub struct VersionInfo {
-    /// Version string (e.g., "4.19.0")
+    /// Version string (e.g. "4.19.0")
     pub version: String,
     /// Download URLs for each platform
     pub urls: HashMap<String, String>,
@@ -296,7 +296,7 @@ pub fn update_cache_for_missing_version(
 /// * `timestamp` - Cache creation timestamp
 ///
 /// # Returns
-/// Human-readable age (e.g., "2h ago" or "30m ago")
+/// Human-readable age (e.g. "2h ago" or "30m ago")
 pub fn format_cache_age(timestamp: &DateTime<Utc>) -> String {
     let now = Utc::now();
     let age = now.signed_duration_since(*timestamp);

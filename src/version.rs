@@ -9,8 +9,8 @@ use std::path::Path;
 
 /// Compare two version strings using semantic versioning rules
 ///
-/// Handles both stable versions (e.g., "4.19.0") and pre-release versions
-/// (e.g., "4.19.0-rc.1"). Pre-release versions are considered less than
+/// Handles both stable versions (e.g. "4.19.0") and pre-release versions
+/// (e.g. "4.19.0-rc.1"). Pre-release versions are considered less than
 /// their corresponding stable versions.
 ///
 /// # Arguments
@@ -69,7 +69,7 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 /// Extract major.minor version from a full version string
 ///
 /// # Arguments
-/// * `version` - Full version string (e.g., "4.19.0" or "4.19.0-rc.1")
+/// * `version` - Full version string (e.g. "4.19.0" or "4.19.0-rc.1")
 ///
 /// # Returns
 /// `Some("major.minor")` if the version has at least major and minor components,
