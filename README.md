@@ -11,6 +11,11 @@ A command-line tool for managing OpenShift 4 client versions.
 ## Installation
 
 - Grab a release from the [Releases Page](https://github.com/t-c-l-o-u-d/ovc/releases)
+- Make it executable and put it somewhere on your `$PATH` (e.g. `~/.local/bin`)
+    ```bash
+    chmod +x ~/Downloads/ovc-*
+    mv ~/Downloads/ovc-* ~/.local/bin/ovc
+    ```
 
 ## Examples
 
