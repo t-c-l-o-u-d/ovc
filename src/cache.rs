@@ -160,7 +160,7 @@ pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
         };
 
         // Save the migrated cache
-        if let Err(_) = save_cached_versions(&new_cache.versions) {
+        if save_cached_versions(&new_cache.versions).is_err() {
             // If saving fails, just continue with the migrated data
         }
 
