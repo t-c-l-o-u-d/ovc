@@ -763,6 +763,15 @@ mod cli_list_tests {
             }
         }
     }
+
+    #[test]
+    fn test_debug_list_output() {
+        let output = run_ovc(&["--list", "4.19.0"]);
+        println!("Exit status: {}", output.status);
+        println!("STDOUT:\n{}", String::from_utf8_lossy(&output.stdout));
+        println!("STDERR:\n{}", String::from_utf8_lossy(&output.stderr));
+        assert!(output.status.success());
+    }
 }
 
 #[cfg(test)]
