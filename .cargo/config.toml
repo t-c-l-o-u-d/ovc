@@ -14,7 +14,7 @@ opt-level = 1
 debug = true
 incremental = true
 
-[target]
+[target.'cfg(all())']
 rustflags = ["-C", "target-cpu=native"]
 
 [net]
