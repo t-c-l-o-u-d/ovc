@@ -297,12 +297,6 @@ fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error
         return Err(format!("No installed versions found matching {}", version_pattern).into());
     }
 
-    // Show what will be removed
-    println!("Will remove the following:");
-    for version in &matching_versions {
-        println!("{}", version);
-    }
-
     // Remove the versions
     let bin_dir = get_bin_dir()?;
     for version in &matching_versions {
