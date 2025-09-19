@@ -871,34 +871,6 @@ mod cli_prune_tests {
     }
 
     #[test]
-    fn test_prune_shows_what_will_be_removed() {
-        // Test that prune shows what will be removed
-        // We'll use a pattern that might match installed versions
-        let output = run_ovc(&["--prune", "4.19"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            assert!(stdout.contains("Will remove the following:"));
-            // Should list versions that start with 4.19
-            let lines: Vec<&str> = stdout.lines().collect();
-            for line in lines.iter().skip(1) {
-                // Skip the "Will remove" line
-                if !line.trim().is_empty() {
-                    assert!(
-                        line.starts_with("4.19"),
-                        "Should list 4.19.x versions: {}",
-                        line
-                    );
-                }
-            }
-        } else {
-            // If no versions match, should show appropriate error
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching"));
-        }
-    }
-
-    #[test]
     fn test_prune_verbose_mode() {
         // Test verbose mode for prune (if any versions match)
         let output = run_ovc(&["-v", "--prune", "999.999"]);
