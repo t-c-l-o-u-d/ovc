@@ -32,8 +32,6 @@ jobs:
           #  runner: "ubuntu-24.04-arm64"
           - arch: "macos-arm64"
             runner: "macos-latest"
-          - arch: "macos-x86_64"
-            runner: "macos-13"
     uses: ./.github/workflows/build.yaml
     with:
       arch: ${{ matrix.arch }}
