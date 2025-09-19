@@ -21,4 +21,3 @@ jobs:
           files: |
             ovc-linux-x86_64/ovc-linux-x86_64
             ovc-macos-arm64/ovc-macos-arm64
-            ovc-macos-x86_64/ovc-macos-x86_64
