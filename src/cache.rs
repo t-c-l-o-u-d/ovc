@@ -232,10 +232,15 @@ pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dy
 
     let mut versions = vec![];
     for line in body.lines() {
-        if let Some(ver) = line.split('"').nth(1) {
-            if ver.ends_with('/') && ver.chars().next().unwrap().is_ascii_digit() {
-                versions.push(ver.trim_end_matches('/').to_string());
-            }
+        if let Some(ver) = line.split('"').nth(1)
+            && ver.ends_with('/')
+            && ver
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+        {
+            versions.push(ver.trim_end_matches('/').to_string());
         }
     }
 
@@ -270,10 +275,10 @@ pub fn update_cache_for_missing_version(
     verbose: bool,
 ) -> Result<bool, Box<dyn Error>> {
     // Check if the version is already in cache (might have been added by another process)
-    if let Some(cache) = load_cached_versions()? {
-        if cache.has_version(missing_version) {
-            return Ok(false); // Version is now in cache, no update needed
-        }
+    if let Some(cache) = load_cached_versions()?
+        && cache.has_version(missing_version)
+    {
+        return Ok(false); // Version is now in cache, no update needed
     }
 
     if verbose {
