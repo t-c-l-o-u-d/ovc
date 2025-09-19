@@ -1,10 +1,7 @@
-# Cargo configuration for optimized CI builds
 
 [build]
-# Let Cargo automatically determine optimal parallel compilation
 
 [profile.release]
-# Optimize for size and speed in CI
 opt-level = 3
 debug = false
 strip = true
@@ -13,34 +10,21 @@ codegen-units = 1
 panic = "abort"
 
 [profile.dev]
-# Faster debug builds for development
 opt-level = 1
 debug = true
 incremental = true
 
-[target.x86_64-unknown-linux-gnu]
-# Linux-specific optimizations
-rustflags = ["-C", "target-cpu=native"]
-
-[target.x86_64-apple-darwin]
-# macOS x86_64 optimizations
-rustflags = ["-C", "target-cpu=native"]
-
-[target.aarch64-apple-darwin]
-# macOS ARM64 optimizations
+[target]
 rustflags = ["-C", "target-cpu=native"]
 
 [net]
-# Use faster Git protocol for dependencies
 git-fetch-with-cli = true
 
 [registry]
-# Use sparse index for faster dependency resolution
 default = "sparse+https://index.crates.io/"
 
 [registries.crates-io]
 protocol = "sparse"
 
 [cargo-new]
-# Default to 2021 edition
-edition = "2021" 
+edition = "2024" 
