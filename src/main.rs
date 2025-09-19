@@ -610,11 +610,11 @@ fn list_installed_versions() -> Result<Vec<String>, Box<dyn Error>> {
 /// `true` if the version exists on the mirror
 fn version_exists_on_mirror(version: &str, platform: &Platform) -> Result<bool, Box<dyn Error>> {
     // Try to get URL from cache first
-    if let Some(cache) = load_cached_versions()? {
-        if let Some(url) = cache.get_download_url(version, platform.name) {
-            let resp = Client::new().head(&url).send()?;
-            return Ok(resp.status().is_success());
-        }
+    if let Some(cache) = load_cached_versions()?
+        && let Some(url) = cache.get_download_url(version, platform.name)
+    {
+        let resp = Client::new().head(&url).send()?;
+        return Ok(resp.status().is_success());
     }
 
     // Fallback to building URL and checking
@@ -694,10 +694,10 @@ fn check_existing_oc_in_path() -> Result<Option<PathBuf>, Box<dyn Error>> {
                 .join(".local/bin");
 
             // If the found oc binary is in ~/.local/bin, ignore it (managed by ovc)
-            if let Some(parent) = path.parent() {
-                if parent == local_bin {
-                    return Ok(None);
-                }
+            if let Some(parent) = path.parent()
+                && parent == local_bin
+            {
+                return Ok(None);
             }
 
             Ok(Some(path))
