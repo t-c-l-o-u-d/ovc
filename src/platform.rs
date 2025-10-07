@@ -51,9 +51,8 @@ impl Platform {
     /// Falls back to LINUX_X86_64 for unsupported platforms.
     pub fn detect() -> Platform {
         match (std::env::consts::OS, std::env::consts::ARCH) {
-            ("linux", _) => Self::LINUX_X86_64,
             ("macos", _) => Self::MAC_ARM64,
-            // Ultimate fallback for unknown OS
+            // Default for Linux and unknown OS
             _ => Self::LINUX_X86_64,
         }
     }

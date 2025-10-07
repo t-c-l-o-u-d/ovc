@@ -482,7 +482,7 @@ mod platform_tests {
         assert_eq!(platform.file_extension, cloned.file_extension);
 
         // Test Debug trait
-        let debug_str = format!("{:?}", platform);
+        let debug_str = format!("{platform:?}");
         assert!(debug_str.contains("Platform"));
         assert!(debug_str.contains("linux-x86_64"));
     }
@@ -670,15 +670,14 @@ mod cli_list_tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         // Should contain versions that start with 4.19
-        let lines: Vec<&str> = stdout.trim().split('\n').collect();
+        let lines: Vec<&str> = stdout.lines().collect();
         assert!(!lines.is_empty());
 
         for line in lines {
             if !line.trim().is_empty() {
                 assert!(
                     line.starts_with("4.19"),
-                    "Line should start with 4.19: {}",
-                    line
+                    "Line should start with 4.19: {line}"
                 );
             }
         }
@@ -695,15 +694,14 @@ mod cli_list_tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         // Should contain versions that start with 4.19.0
-        let lines: Vec<&str> = stdout.trim().split('\n').collect();
+        let lines: Vec<&str> = stdout.lines().collect();
         assert!(!lines.is_empty());
 
         for line in lines {
             if !line.trim().is_empty() {
                 assert!(
                     line.starts_with("4.19.0"),
-                    "Line should start with 4.19.0: {}",
-                    line
+                    "Line should start with 4.19.0: {line}"
                 );
             }
         }
@@ -737,12 +735,12 @@ mod cli_list_tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         // Verbose mode should still just list versions (no extra info for list command)
-        let lines: Vec<&str> = stdout.trim().split('\n').collect();
+        let lines: Vec<&str> = stdout.lines().collect();
         for line in lines {
             if !line.trim().is_empty() {
                 assert!(line.starts_with("4.19"));
                 // Should not contain extra verbose info like paths
-                assert!(!line.contains("("));
+                assert!(!line.contains('('));
             }
         }
     }
@@ -779,7 +777,7 @@ mod cli_installed_tests {
             let stdout = String::from_utf8_lossy(&output.stdout);
             // If any versions are installed, they should show paths
             if !stdout.trim().is_empty() {
-                assert!(stdout.contains("oc_bins") || stdout.contains("/"));
+                assert!(stdout.contains("oc_bins") || stdout.contains('/'));
             }
         } else {
             // If no versions match, should show appropriate error
@@ -796,13 +794,12 @@ mod cli_installed_tests {
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = stdout.trim().split('\n').collect();
+            let lines: Vec<&str> = stdout.lines().collect();
             for line in lines {
                 if !line.trim().is_empty() {
                     assert!(
                         line.starts_with("4.19"),
-                        "Should list 4.19.x versions: {}",
-                        line
+                        "Should list 4.19.x versions: {line}"
                     );
                 }
             }
@@ -829,7 +826,7 @@ mod cli_installed_tests {
             let stdout = String::from_utf8_lossy(&output.stdout);
             // Verbose mode should show paths if versions are found
             if !stdout.trim().is_empty() {
-                assert!(stdout.contains("(") && stdout.contains(")"));
+                assert!(stdout.contains('(') && stdout.contains(')'));
             }
         } else {
             // If no versions match, should show appropriate error
@@ -882,26 +879,23 @@ mod cli_behavior_tests {
     fn test_path_warnings() {
         // Test with a PATH that doesn't include ~/.local/bin but includes cargo
         let current_path = std::env::var("PATH").unwrap_or_default();
-        let modified_path = format!("/usr/bin:/bin:{}", current_path);
+        let modified_path = format!("/usr/bin:/bin:{current_path}");
 
         let output = Command::new("cargo")
             .args(["run", "--", "--list", "4.19"])
             .env("PATH", modified_path)
             .output();
 
-        match output {
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                // Should warn about PATH if oc is found but ~/.local/bin is not in PATH
-                if stderr.contains("Warning") {
-                    assert!(stderr.contains("PATH") || stderr.contains("not found"));
-                }
-                // Test passes if command runs successfully or fails gracefully
+        if let Ok(output) = output {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Should warn about PATH if oc is found but ~/.local/bin is not in PATH
+            if stderr.contains("Warning") {
+                assert!(stderr.contains("PATH") || stderr.contains("not found"));
             }
-            Err(_) => {
-                // If we can't run the command due to PATH issues, that's also a valid test case
-                // This test is mainly about ensuring the app handles PATH issues gracefully
-            }
+            // Test passes if command runs successfully or fails gracefully
+        } else {
+            // If we can't run the command due to PATH issues, that's also a valid test case
+            // This test is mainly about ensuring the app handles PATH issues gracefully
         }
     }
 
@@ -913,14 +907,14 @@ mod cli_behavior_tests {
         let output = run_ovc(&["--list", "4.19"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(!stdout.contains("("));
+        assert!(!stdout.contains('('));
 
         // installed should just list versions
         let output = run_ovc(&["--installed", "4.19"]);
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            assert!(!stdout.contains("("));
+            assert!(!stdout.contains('('));
         } else {
             // If no versions match, that's also valid for this test
             let stderr = String::from_utf8_lossy(&output.stderr);
