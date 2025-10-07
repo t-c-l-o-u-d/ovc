@@ -2,6 +2,10 @@
 name = "ovc"
 version = "1.1.0"
 edition = "2024"
+rust-version = "1.90"
+description = "CLI application to manage OpenShift client versions"
+license = "AGPLv3"
+repository = "https://github.com/t-c-l-o-u-d/ovc"
 
 [[bin]]
 name = "ovc"
