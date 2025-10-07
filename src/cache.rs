@@ -194,12 +194,7 @@ pub fn save_cached_versions(versions: &[VersionInfo]) -> Result<(), Box<dyn Erro
 /// # Returns
 /// Vector of VersionInfo with URLs populated for all platforms
 pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
-    let platforms = [
-        Platform::LINUX_X86_64,
-        Platform::LINUX_ARM64,
-        Platform::MAC_X86_64,
-        Platform::MAC_ARM64,
-    ];
+    let platforms = [Platform::LINUX_X86_64, Platform::MAC_ARM64];
 
     version_strings
         .iter()
