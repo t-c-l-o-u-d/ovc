@@ -229,11 +229,7 @@ pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dy
     for line in body.lines() {
         if let Some(ver) = line.split('"').nth(1)
             && ver.ends_with('/')
-            && ver
-                .chars()
-                .next()
-                .map(|c| c.is_ascii_digit())
-                .unwrap_or(false)
+            && ver.chars().next().is_some_and(|c| c.is_ascii_digit())
         {
             versions.push(ver.trim_end_matches('/').to_string());
         }
@@ -245,7 +241,7 @@ pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dy
     if let Err(e) = save_cached_versions(&build_version_info(&versions)) {
         // Don't fail the operation if caching fails, just log it in verbose mode
         if verbose {
-            eprintln!("Warning: Failed to cache versions: {}", e);
+            eprintln!("Warning: Failed to cache versions: {e}");
         }
     } else if verbose {
         eprintln!("Cached {} versions", versions.len());
@@ -277,10 +273,7 @@ pub fn update_cache_for_missing_version(
     }
 
     if verbose {
-        eprintln!(
-            "Version {} not found in cache, updating from API...",
-            missing_version
-        );
+        eprintln!("Version {missing_version} not found in cache, updating from API...");
     }
 
     // Fetch fresh data and update cache

@@ -81,11 +81,11 @@ fn main() {
     let result = if action_count > 1 {
         Err("Only one action can be specified at a time".into())
     } else if let Some(version_pattern) = cli.list {
-        cmd_list_available(version_pattern, cli.verbose)
+        cmd_list_available(&version_pattern, cli.verbose)
     } else if let Some(version_pattern) = cli.installed {
-        cmd_list_installed(version_pattern, cli.verbose)
+        cmd_list_installed(&version_pattern, cli.verbose)
     } else if let Some(version_pattern) = cli.prune {
-        cmd_prune(version_pattern, cli.verbose)
+        cmd_prune(&version_pattern, cli.verbose)
     } else {
         // Default action: download, but require a version
         match cli.target_version {
@@ -96,7 +96,7 @@ fn main() {
 
     // Handle errors by printing to stderr and exiting with non-zero status
     if let Err(e) = result {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         exit(1);
     }
 }
@@ -129,7 +129,7 @@ fn matches_version_pattern(version: &str, pattern: &str) -> bool {
     }
 
     // Check if version starts with pattern followed by a dot or dash
-    version.starts_with(&format!("{}.", pattern)) || version.starts_with(&format!("{}-", pattern))
+    version.starts_with(&format!("{pattern}.")) || version.starts_with(&format!("{pattern}-"))
 }
 
 /// Download and install a specific OpenShift client version
@@ -165,7 +165,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
     let resolved_version = resolve_version(&input_version)?;
 
     if verbose && input_version != resolved_version {
-        eprintln!("Resolved {} to {}", input_version, resolved_version);
+        eprintln!("Resolved {input_version} to {resolved_version}");
     }
 
     let (path, downloaded, _download_url) =
@@ -173,14 +173,10 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
 
     if verbose {
         if downloaded {
-            eprintln!("Downloading: {}", resolved_version);
+            eprintln!("Downloading: {resolved_version}");
             eprintln!("Downloaded to: {}", path.display());
         } else {
-            eprintln!(
-                "Already installed: {} ({})",
-                resolved_version,
-                path.display()
-            );
+            eprintln!("Already installed: {resolved_version} ({})", path.display());
         }
     }
 
@@ -188,7 +184,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
     set_default_oc_with_platform(&resolved_version, &platform)?;
 
     if verbose {
-        eprintln!("Set as default: {}", resolved_version);
+        eprintln!("Set as default: {resolved_version}");
     }
 
     // Only show warnings in verbose mode
@@ -207,7 +203,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
 /// # Arguments
 /// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show full paths
-fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
@@ -219,19 +215,19 @@ fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<
     // Filter versions that match the pattern
     let matching_versions: Vec<String> = all_versions
         .into_iter()
-        .filter(|v| matches_version_pattern(v, &version_pattern))
+        .filter(|v| matches_version_pattern(v, version_pattern))
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(format!("No installed versions found matching {}", version_pattern).into());
+        return Err(format!("No installed versions found matching {version_pattern}").into());
     }
 
     for version in matching_versions {
         if verbose {
-            let path = get_bin_dir()?.join(format!("oc-{}", version));
-            println!("{} ({})", version, path.display());
+            let path = get_bin_dir()?.join(format!("oc-{version}"));
+            println!("{version} ({})", path.display());
         } else {
-            println!("{}", version);
+            println!("{version}");
         }
     }
     Ok(())
@@ -245,7 +241,7 @@ fn cmd_list_installed(version_pattern: String, verbose: bool) -> Result<(), Box<
 /// # Arguments
 /// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show cache status and other details
-fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
@@ -257,11 +253,11 @@ fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<
     // Filter versions that match the pattern
     let matching_versions: Vec<String> = all_versions
         .into_iter()
-        .filter(|v| matches_version_pattern(v, &version_pattern))
+        .filter(|v| matches_version_pattern(v, version_pattern))
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(format!("No versions found matching {}", version_pattern).into());
+        return Err(format!("No versions found matching {version_pattern}").into());
     }
 
     for version in matching_versions {
@@ -278,7 +274,7 @@ fn cmd_list_available(version_pattern: String, verbose: bool) -> Result<(), Box<
 /// # Arguments
 /// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show detailed removal progress
-fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
     // Validate minimum version format (must have at least major.minor)
     let parts: Vec<&str> = version_pattern.split('.').collect();
     if parts.len() < 2 {
@@ -290,17 +286,17 @@ fn cmd_prune(version_pattern: String, verbose: bool) -> Result<(), Box<dyn Error
     // Filter versions that match the pattern
     let matching_versions: Vec<String> = installed_versions
         .into_iter()
-        .filter(|v| matches_version_pattern(v, &version_pattern))
+        .filter(|v| matches_version_pattern(v, version_pattern))
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(format!("No installed versions found matching {}", version_pattern).into());
+        return Err(format!("No installed versions found matching {version_pattern}").into());
     }
 
     // Remove the versions
     let bin_dir = get_bin_dir()?;
     for version in &matching_versions {
-        let oc_path = bin_dir.join(format!("oc-{}", version));
+        let oc_path = bin_dir.join(format!("oc-{version}"));
         if oc_path.exists() {
             if verbose {
                 eprintln!("Removing: {}", oc_path.display());
@@ -363,7 +359,7 @@ fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
         });
 
         if !is_in_path && verbose {
-            eprintln!("Warning: ~/.local/bin is not in your ${{PATH}}")
+            eprintln!("Warning: ~/.local/bin is not in your ${{PATH}}");
         }
     } else {
         eprintln!("Warning: Could not read $PATH environment variable");
@@ -414,7 +410,7 @@ fn resolve_version(input_version: &str) -> Result<String, Box<dyn Error>> {
         }
     }
 
-    Err(format!("No versions found matching {}", input_version).into())
+    Err(format!("No versions found matching {input_version}").into())
 }
 
 /// Get the latest stable version available
@@ -462,7 +458,7 @@ fn ensure_oc_binary_with_platform(
     verbose: bool,
 ) -> Result<(PathBuf, bool, String), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(platform)?;
-    let oc_path = bin_dir.join(format!("oc-{}", version));
+    let oc_path = bin_dir.join(format!("oc-{version}"));
 
     // Try to get URL from cache first, fallback to building it
     let download_url = if let Some(cache) = load_cached_versions()? {
@@ -492,7 +488,7 @@ fn ensure_oc_binary_with_platform(
     }
 
     if verbose {
-        eprintln!("Downloading from: {}", download_url);
+        eprintln!("Downloading from: {download_url}");
     }
     download_and_extract_with_url(version, &oc_path, &download_url)?;
     Ok((oc_path, true, download_url)) // true = download performed
@@ -539,7 +535,7 @@ fn download_and_extract_with_url(
     let resp = Client::new().get(download_url).send()?;
 
     if !resp.status().is_success() {
-        return Err(format!("Failed to download: {}", download_url).into());
+        return Err(format!("Failed to download: {download_url}").into());
     }
 
     let tar_gz = GzDecoder::new(resp);
@@ -620,7 +616,7 @@ fn version_exists_on_mirror(version: &str, platform: &Platform) -> Result<bool, 
 /// Set a specific version as the default OpenShift client
 fn set_default_oc_with_platform(version: &str, platform: &Platform) -> Result<(), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(platform)?;
-    let oc_path = bin_dir.join(format!("oc-{}", version));
+    let oc_path = bin_dir.join(format!("oc-{version}"));
 
     // Ensure the binary exists (download if needed)
     if !oc_path.exists() {

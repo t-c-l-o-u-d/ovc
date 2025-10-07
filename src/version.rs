@@ -52,7 +52,7 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
         let a_part = a_parts.get(i).unwrap_or(&0);
         let b_part = b_parts.get(i).unwrap_or(&0);
         match a_part.cmp(b_part) {
-            std::cmp::Ordering::Equal => continue,
+            std::cmp::Ordering::Equal => {}
             other => return other,
         }
     }
@@ -87,7 +87,7 @@ pub fn extract_major_minor(version: &str) -> Option<String> {
     let major = parts.next()?;
     let minor = parts.next()?;
     if !major.is_empty() && !minor.is_empty() {
-        Some(format!("{}.{}", major, minor))
+        Some(format!("{major}.{minor}"))
     } else {
         None
     }
