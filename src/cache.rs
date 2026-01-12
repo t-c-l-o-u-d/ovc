@@ -238,7 +238,7 @@ pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
 pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
     let platform = Platform::detect();
     let url = platform.build_versions_url();
-    let body = attohttpc::get(&url).send()?.text()?;
+    let body = reqwest::blocking::get(&url)?.text()?;
 
     let mut versions = vec![];
     for line in body.lines() {
