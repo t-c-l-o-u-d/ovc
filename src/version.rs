@@ -19,6 +19,7 @@ use std::path::Path;
 ///
 /// # Returns
 /// `std::cmp::Ordering` indicating the relationship between the versions
+#[must_use]
 pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     let parse_version = |v: &str| -> (Vec<u32>, bool, String) {
         // Split on '-' to separate base version from pre-release suffix
@@ -82,6 +83,7 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 /// assert_eq!(extract_major_minor("4.19.0-rc.1"), Some("4.19".to_string()));
 /// assert_eq!(extract_major_minor("4"), None);
 /// ```
+#[must_use]
 pub fn extract_major_minor(version: &str) -> Option<String> {
     let mut parts = version.split('.');
     let major = parts.next()?;
@@ -110,6 +112,7 @@ pub fn extract_major_minor(version: &str) -> Option<String> {
 /// assert_eq!(extract_version_number("4.19.0"), "4.19.0");
 /// assert_eq!(extract_version_number("4.19.0-dirty"), "4.19.0");
 /// ```
+#[must_use]
 pub fn extract_version_number(version_output: &str) -> &str {
     version_output
         .split(|c: char| !c.is_ascii_digit() && c != '.')
@@ -134,6 +137,7 @@ pub fn extract_version_number(version_output: &str) -> &str {
 /// assert!(is_stable_version("4.19.0"));
 /// assert!(!is_stable_version("4.19.0-rc.1"));
 /// ```
+#[must_use]
 pub fn is_stable_version(version: &str) -> bool {
     let version_lower = version.to_lowercase();
     !version_lower.contains("-rc")
@@ -162,6 +166,7 @@ pub fn is_stable_version(version: &str) -> bool {
 /// let path = Path::new("/path/to/oc-4.19.0");
 /// assert_eq!(extract_version_from_path(path), "4.19.0");
 /// ```
+#[must_use]
 pub fn extract_version_from_path(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
@@ -190,6 +195,7 @@ pub fn extract_version_from_path(path: &Path) -> String {
 /// assert_eq!(find_matching_version("4.19", &available), Some("4.19.1".to_string()));
 /// assert_eq!(find_matching_version("4.19.0", &available), Some("4.19.0".to_string()));
 /// ```
+#[must_use]
 pub fn find_matching_version(
     server_version: &str,
     available_versions: &[String],

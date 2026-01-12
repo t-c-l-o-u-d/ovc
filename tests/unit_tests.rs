@@ -413,12 +413,6 @@ mod platform_tests {
         assert_eq!(Platform::LINUX_X86_64.mirror_path, "x86_64");
         assert_eq!(Platform::LINUX_X86_64.binary_suffix, "linux");
         assert_eq!(Platform::LINUX_X86_64.file_extension, "tar.gz");
-
-        // Test macOS ARM64
-        assert_eq!(Platform::MAC_ARM64.name, "mac-arm64");
-        assert_eq!(Platform::MAC_ARM64.mirror_path, "x86_64");
-        assert_eq!(Platform::MAC_ARM64.binary_suffix, "mac-arm64");
-        assert_eq!(Platform::MAC_ARM64.file_extension, "tar.gz");
     }
 
     #[test]
@@ -457,7 +451,7 @@ mod platform_tests {
 
     #[test]
     fn test_all_platforms_url_building() {
-        let platforms = [Platform::LINUX_X86_64, Platform::MAC_ARM64];
+        let platforms = [Platform::LINUX_X86_64];
 
         for platform in &platforms {
             let download_url = platform.build_download_url("4.19.0");

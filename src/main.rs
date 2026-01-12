@@ -21,19 +21,15 @@ use std::process::exit;
 
 use clap::Parser;
 use flate2::read::GzDecoder;
-use reqwest::blocking::Client;
 
 use tar::Archive;
 
 // Import from library
-use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version};
-
-// Import cache functionality
-mod cache;
-use cache::{
+use ovc::cache::{
     get_available_versions, get_available_versions_with_verbose, load_cached_versions,
     update_cache_for_missing_version, version_exists_in_cache,
 };
+use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version};
 
 /// Command line interface structure
 #[derive(Parser)]
@@ -261,7 +257,7 @@ fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
     }
 
     for version in matching_versions {
-        println!("{}", version);
+        println!("{version}");
     }
     Ok(())
 }
@@ -323,7 +319,7 @@ fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>>
 /// # Arguments
 /// * `verbose` - Whether to show debug information about PATH detection
 fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
-    let local_bin = dirs::home_dir()
+    let local_bin = home::home_dir()
         .ok_or("Could not find home directory")?
         .join(".local/bin");
     let oc_symlink = local_bin.join("oc");
@@ -510,7 +506,7 @@ fn get_bin_dir() -> Result<PathBuf, Box<dyn Error>> {
 /// # Returns
 /// Path to the platform-specific binary directory
 fn get_bin_dir_with_platform(platform: &Platform) -> Result<PathBuf, Box<dyn Error>> {
-    let bin_dir = dirs::home_dir()
+    let bin_dir = home::home_dir()
         .ok_or("Could not find home directory")?
         .join(OC_BIN_DIR)
         .join(platform.name);
@@ -532,9 +528,9 @@ fn download_and_extract_with_url(
     oc_path: &PathBuf,
     download_url: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let resp = Client::new().get(download_url).send()?;
+    let resp = attohttpc::get(download_url).send()?;
 
-    if !resp.status().is_success() {
+    if !resp.is_success() {
         return Err(format!("Failed to download: {download_url}").into());
     }
 
@@ -603,14 +599,14 @@ fn version_exists_on_mirror(version: &str, platform: &Platform) -> Result<bool, 
     if let Some(cache) = load_cached_versions()?
         && let Some(url) = cache.get_download_url(version, platform.name)
     {
-        let resp = Client::new().head(&url).send()?;
-        return Ok(resp.status().is_success());
+        let resp = attohttpc::head(&url).send()?;
+        return Ok(resp.is_success());
     }
 
     // Fallback to building URL and checking
     let url = platform.build_download_url(version);
-    let resp = Client::new().head(&url).send()?;
-    Ok(resp.status().is_success())
+    let resp = attohttpc::head(&url).send()?;
+    Ok(resp.is_success())
 }
 
 /// Set a specific version as the default OpenShift client
@@ -624,7 +620,7 @@ fn set_default_oc_with_platform(version: &str, platform: &Platform) -> Result<()
     }
 
     // Create ~/.local/bin directory and symlinks
-    let local_bin = dirs::home_dir()
+    let local_bin = home::home_dir()
         .ok_or("Could not find home directory")?
         .join(".local/bin");
     fs::create_dir_all(&local_bin)?;
@@ -679,7 +675,7 @@ fn check_existing_oc_in_path() -> Result<Option<PathBuf>, Box<dyn Error>> {
     match which::which("oc") {
         Ok(path) => {
             // Get the ~/.local/bin directory to exclude it from conflicts
-            let local_bin = dirs::home_dir()
+            let local_bin = home::home_dir()
                 .ok_or("Could not find home directory")?
                 .join(".local/bin");
 

@@ -36,25 +36,13 @@ impl Platform {
         file_extension: "tar.gz",
     };
 
-    /// macOS ARM64 platform configuration
-    /// Note: Mac ARM64 binaries are stored in the x86_64 directory on the mirror
-    pub const MAC_ARM64: Platform = Platform {
-        name: "mac-arm64",
-        mirror_path: "x86_64",
-        binary_suffix: "mac-arm64",
-        file_extension: "tar.gz",
-    };
-
     /// Automatically detect the current platform based on OS and architecture
     ///
     /// Returns the appropriate Platform constant based on the runtime environment.
-    /// Falls back to LINUX_X86_64 for unsupported platforms.
+    /// Currently only supports Linux x86_64.
+    #[must_use]
     pub fn detect() -> Platform {
-        match (std::env::consts::OS, std::env::consts::ARCH) {
-            ("macos", _) => Self::MAC_ARM64,
-            // Default for Linux and unknown OS
-            _ => Self::LINUX_X86_64,
-        }
+        Self::LINUX_X86_64
     }
 
     /// Build the download URL for a specific version on this platform
@@ -64,6 +52,7 @@ impl Platform {
     ///
     /// # Returns
     /// Complete URL to download the specified version for this platform
+    #[must_use]
     pub fn build_download_url(&self, version: &str) -> String {
         format!(
             "{}/{}/clients/ocp/{}/openshift-client-{}-{}.{}",
@@ -80,6 +69,7 @@ impl Platform {
     ///
     /// # Returns
     /// URL to the directory listing of available versions for this platform
+    #[must_use]
     pub fn build_versions_url(&self) -> String {
         format!("{}/{}/clients/ocp/", OC_MIRROR_BASE, self.mirror_path)
     }

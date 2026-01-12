@@ -6,6 +6,7 @@
 //! downloading and organizing different versions of the OpenShift CLI tool.
 
 // Re-export public API from organized modules
+pub mod cache;
 pub mod platform;
 pub mod version;
 
