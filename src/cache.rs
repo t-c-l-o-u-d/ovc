@@ -10,7 +10,6 @@ use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-use attohttpc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -110,18 +109,17 @@ impl VersionCache {
 
 /// Get the cache directory path, creating it if it doesn't exist
 ///
-/// Creates the ~/.cache/ovc directory structure for storing cached data.
+/// Uses `$XDG_CACHE_HOME` if set, otherwise falls back to `$HOME/.cache`.
 ///
 /// # Returns
 /// Path to the cache directory
 ///
 /// # Errors
-/// Returns error if home directory cannot be found or directory creation fails
+/// Returns error if HOME environment variable is not set or directory creation fails
 pub fn get_cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let cache_dir = home::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".cache")
-        .join("ovc");
+    let cache_base = std::env::var("XDG_CACHE_HOME")
+        .or_else(|_| std::env::var("HOME").map(|home| format!("{home}/.cache")))?;
+    let cache_dir = PathBuf::from(cache_base).join("ovc");
     fs::create_dir_all(&cache_dir)?;
     Ok(cache_dir)
 }
@@ -240,8 +238,7 @@ pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
 pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
     let platform = Platform::detect();
     let url = platform.build_versions_url();
-    let resp = attohttpc::get(&url).send()?;
-    let body = resp.text()?;
+    let body = attohttpc::get(&url).send()?.text()?;
 
     let mut versions = vec![];
     for line in body.lines() {

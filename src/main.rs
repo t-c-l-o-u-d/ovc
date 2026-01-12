@@ -146,7 +146,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
     };
 
     // Check for existing oc binary in PATH before proceeding
-    if let Some(existing_oc_path) = check_existing_oc_in_path()? {
+    if let Some(existing_oc_path) = check_existing_oc_in_path() {
         return Err(format!(
             "Error: Remove the existing oc binary found in ${{PATH}}: {}",
             existing_oc_path.display()
@@ -185,7 +185,7 @@ fn cmd_download(version: Option<String>, verbose: bool) -> Result<(), Box<dyn Er
 
     // Only show warnings in verbose mode
     if verbose {
-        check_path_warnings(verbose)?;
+        check_path_warnings(verbose);
     }
 
     Ok(())
@@ -318,17 +318,19 @@ fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>>
 ///
 /// # Arguments
 /// * `verbose` - Whether to show debug information about PATH detection
-fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
-    let local_bin = home::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".local/bin");
+fn check_path_warnings(verbose: bool) {
+    let Ok(home) = std::env::var("HOME") else {
+        eprintln!("Warning: HOME environment variable not set");
+        return;
+    };
+    let local_bin = PathBuf::from(&home).join(".local/bin");
     let oc_symlink = local_bin.join("oc");
 
     // Check if oc binary exists in ~/.local/bin
     if !oc_symlink.exists() {
         eprintln!("Warning: oc binary not found in ~/.local/bin");
         eprintln!("Run 'ovc [VERSION]' to install a version and set it as default");
-        return Ok(());
+        return;
     }
 
     // Check if ~/.local/bin is in PATH
@@ -360,8 +362,6 @@ fn check_path_warnings(verbose: bool) -> Result<(), Box<dyn Error>> {
     } else {
         eprintln!("Warning: Could not read $PATH environment variable");
     }
-
-    Ok(())
 }
 
 // =============================================================================
@@ -506,10 +506,8 @@ fn get_bin_dir() -> Result<PathBuf, Box<dyn Error>> {
 /// # Returns
 /// Path to the platform-specific binary directory
 fn get_bin_dir_with_platform(platform: &Platform) -> Result<PathBuf, Box<dyn Error>> {
-    let bin_dir = home::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(OC_BIN_DIR)
-        .join(platform.name);
+    let home = std::env::var("HOME")?;
+    let bin_dir = PathBuf::from(&home).join(OC_BIN_DIR).join(platform.name);
     fs::create_dir_all(&bin_dir)?;
     Ok(bin_dir)
 }
@@ -529,11 +527,9 @@ fn download_and_extract_with_url(
     download_url: &str,
 ) -> Result<(), Box<dyn Error>> {
     let resp = attohttpc::get(download_url).send()?;
-
     if !resp.is_success() {
         return Err(format!("Failed to download: {download_url}").into());
     }
-
     let tar_gz = GzDecoder::new(resp);
     let mut archive = Archive::new(tar_gz);
 
@@ -620,9 +616,8 @@ fn set_default_oc_with_platform(version: &str, platform: &Platform) -> Result<()
     }
 
     // Create ~/.local/bin directory and symlinks
-    let local_bin = home::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".local/bin");
+    let home = std::env::var("HOME")?;
+    let local_bin = PathBuf::from(&home).join(".local/bin");
     fs::create_dir_all(&local_bin)?;
 
     // Create symlinks (binary existence is already guaranteed above)
@@ -671,23 +666,19 @@ fn create_symlink(target: &Path, link: &Path) -> Result<(), Box<dyn Error>> {
 /// Check for existing oc binary in PATH using the which crate
 /// Ignores the oc binary in ~/.local/bin since that's managed by ovc itself.
 /// # Returns: `Some(path)` if an oc binary is found in PATH (excluding ~/.local/bin), `None` otherwise
-fn check_existing_oc_in_path() -> Result<Option<PathBuf>, Box<dyn Error>> {
-    match which::which("oc") {
-        Ok(path) => {
-            // Get the ~/.local/bin directory to exclude it from conflicts
-            let local_bin = home::home_dir()
-                .ok_or("Could not find home directory")?
-                .join(".local/bin");
+fn check_existing_oc_in_path() -> Option<PathBuf> {
+    let path = which::which("oc").ok()?;
 
-            // If the found oc binary is in ~/.local/bin, ignore it (managed by ovc)
-            if let Some(parent) = path.parent()
-                && parent == local_bin
-            {
-                return Ok(None);
-            }
+    // Get the ~/.local/bin directory to exclude it from conflicts
+    let home = std::env::var("HOME").ok()?;
+    let local_bin = PathBuf::from(&home).join(".local/bin");
 
-            Ok(Some(path))
-        }
-        Err(_) => Ok(None), // oc not found in PATH
+    // If the found oc binary is in ~/.local/bin, ignore it (managed by ovc)
+    if let Some(parent) = path.parent()
+        && parent == local_bin
+    {
+        return None;
     }
+
+    Some(path)
 }
