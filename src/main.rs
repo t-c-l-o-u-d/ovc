@@ -1,4 +1,6 @@
 // GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// Allow multiple crate versions for Windows-only dependencies (we only target Linux)
+#![allow(clippy::multiple_crate_versions)]
 //! OpenShift Client Version Control (ovc) - Main Application
 //!
 //! This is the main entry point for the ovc CLI tool, which provides functionality
@@ -526,8 +528,8 @@ fn download_and_extract_with_url(
     oc_path: &PathBuf,
     download_url: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let resp = attohttpc::get(download_url).send()?;
-    if !resp.is_success() {
+    let resp = reqwest::blocking::get(download_url)?;
+    if !resp.status().is_success() {
         return Err(format!("Failed to download: {download_url}").into());
     }
     let tar_gz = GzDecoder::new(resp);
@@ -591,18 +593,20 @@ fn list_installed_versions() -> Result<Vec<String>, Box<dyn Error>> {
 /// # Returns
 /// `true` if the version exists on the mirror
 fn version_exists_on_mirror(version: &str, platform: &Platform) -> Result<bool, Box<dyn Error>> {
+    let client = reqwest::blocking::Client::new();
+
     // Try to get URL from cache first
     if let Some(cache) = load_cached_versions()?
         && let Some(url) = cache.get_download_url(version, platform.name)
     {
-        let resp = attohttpc::head(&url).send()?;
-        return Ok(resp.is_success());
+        let resp = client.head(&url).send()?;
+        return Ok(resp.status().is_success());
     }
 
     // Fallback to building URL and checking
     let url = platform.build_download_url(version);
-    let resp = attohttpc::head(&url).send()?;
-    Ok(resp.is_success())
+    let resp = client.head(&url).send()?;
+    Ok(resp.status().is_success())
 }
 
 /// Set a specific version as the default OpenShift client

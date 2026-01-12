@@ -1,4 +1,6 @@
 // GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// Allow multiple crate versions for Windows-only dependencies (we only target Linux)
+#![allow(clippy::multiple_crate_versions)]
 //! OpenShift Client Version Control Library
 //!
 //! This library provides functionality for managing OpenShift client (`oc`) versions,
