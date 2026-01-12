@@ -10,11 +10,11 @@ use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
+use attohttpc;
 use chrono::{DateTime, Utc};
-use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-use ovc::{Platform, compare_versions};
+use crate::{Platform, compare_versions};
 
 /// Version information with download URLs for all platforms
 #[derive(Serialize, Deserialize, Clone)]
@@ -52,6 +52,7 @@ impl VersionCache {
     ///
     /// # Arguments
     /// * `versions` - Vector of VersionInfo to cache
+    #[must_use]
     pub fn new(versions: Vec<VersionInfo>) -> Self {
         Self {
             versions,
@@ -63,6 +64,7 @@ impl VersionCache {
     ///
     /// # Returns
     /// Vector of version strings
+    #[must_use]
     pub fn get_version_strings(&self) -> Vec<String> {
         self.versions.iter().map(|v| v.version.clone()).collect()
     }
@@ -75,6 +77,7 @@ impl VersionCache {
     ///
     /// # Returns
     /// `Some(url)` if found, `None` otherwise
+    #[must_use]
     pub fn get_download_url(&self, version: &str, platform_name: &str) -> Option<String> {
         self.versions
             .iter()
@@ -90,6 +93,7 @@ impl VersionCache {
     ///
     /// # Returns
     /// `true` if the version exists in cache
+    #[must_use]
     pub fn has_version(&self, version: &str) -> bool {
         self.versions.iter().any(|v| v.version == version)
     }
@@ -98,6 +102,7 @@ impl VersionCache {
     ///
     /// # Returns
     /// Reference to the cache creation timestamp
+    #[must_use]
     pub fn timestamp(&self) -> &DateTime<Utc> {
         &self.timestamp
     }
@@ -113,7 +118,7 @@ impl VersionCache {
 /// # Errors
 /// Returns error if home directory cannot be found or directory creation fails
 pub fn get_cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let cache_dir = dirs::home_dir()
+    let cache_dir = home::home_dir()
         .ok_or("Could not find home directory")?
         .join(".cache")
         .join("ovc");
@@ -125,6 +130,9 @@ pub fn get_cache_dir() -> Result<PathBuf, Box<dyn Error>> {
 ///
 /// # Returns
 /// Path to the versions.json cache file
+///
+/// # Errors
+/// Returns error if the cache directory cannot be created
 pub fn get_cache_file_path() -> Result<PathBuf, Box<dyn Error>> {
     Ok(get_cache_dir()?.join("versions.json"))
 }
@@ -136,6 +144,9 @@ pub fn get_cache_file_path() -> Result<PathBuf, Box<dyn Error>> {
 ///
 /// # Returns
 /// `Some(VersionCache)` if valid cache exists, `None` otherwise
+///
+/// # Errors
+/// Returns error if the cache file exists but cannot be read
 pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
     let cache_file = get_cache_file_path()?;
 
@@ -178,6 +189,9 @@ pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
 ///
 /// # Arguments
 /// * `versions` - List of VersionInfo to cache
+///
+/// # Errors
+/// Returns error if the cache file cannot be written
 pub fn save_cached_versions(versions: &[VersionInfo]) -> Result<(), Box<dyn Error>> {
     let cache_file = get_cache_file_path()?;
     let cache = VersionCache::new(versions.to_vec());
@@ -193,8 +207,9 @@ pub fn save_cached_versions(versions: &[VersionInfo]) -> Result<(), Box<dyn Erro
 ///
 /// # Returns
 /// Vector of VersionInfo with URLs populated for all platforms
+#[must_use]
 pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
-    let platforms = [Platform::LINUX_X86_64, Platform::MAC_ARM64];
+    let platforms = [Platform::LINUX_X86_64];
 
     version_strings
         .iter()
@@ -219,10 +234,13 @@ pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
 ///
 /// # Returns
 /// Vector of available version strings sorted by semantic version
+///
+/// # Errors
+/// Returns error if the API request fails or the response cannot be parsed
 pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
     let platform = Platform::detect();
     let url = platform.build_versions_url();
-    let resp = Client::new().get(&url).send()?;
+    let resp = attohttpc::get(&url).send()?;
     let body = resp.text()?;
 
     let mut versions = vec![];
@@ -261,6 +279,9 @@ pub fn fetch_and_cache_all_versions(verbose: bool) -> Result<Vec<String>, Box<dy
 ///
 /// # Returns
 /// `true` if cache was updated, `false` if version was already in cache
+///
+/// # Errors
+/// Returns error if the API request fails or cache cannot be updated
 pub fn update_cache_for_missing_version(
     missing_version: &str,
     verbose: bool,
@@ -290,6 +311,7 @@ pub fn update_cache_for_missing_version(
 ///
 /// # Returns
 /// Human-readable age (e.g. "2h ago" or "30m ago")
+#[must_use]
 pub fn format_cache_age(timestamp: &DateTime<Utc>) -> String {
     let now = Utc::now();
     let age = now.signed_duration_since(*timestamp);
@@ -315,6 +337,9 @@ pub fn format_cache_age(timestamp: &DateTime<Utc>) -> String {
 ///
 /// # Returns
 /// `Some(true)` if found, `Some(false)` if not found after cache update, `None` if cache unavailable
+///
+/// # Errors
+/// Returns error if cache cannot be loaded or updated
 pub fn version_exists_in_cache(
     version: &str,
     platform: &Platform,
@@ -344,6 +369,9 @@ pub fn version_exists_in_cache(
 }
 
 /// Get available versions without verbose output
+///
+/// # Errors
+/// Returns error if versions cannot be fetched from cache or API
 pub fn get_available_versions() -> Result<Vec<String>, Box<dyn Error>> {
     get_available_versions_with_verbose(false)
 }
@@ -358,6 +386,9 @@ pub fn get_available_versions() -> Result<Vec<String>, Box<dyn Error>> {
 ///
 /// # Returns
 /// Vector of available version strings sorted by semantic version
+///
+/// # Errors
+/// Returns error if versions cannot be fetched from cache or API
 pub fn get_available_versions_with_verbose(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
     // Try to load from cache first
     if let Some(cache) = load_cached_versions()? {
