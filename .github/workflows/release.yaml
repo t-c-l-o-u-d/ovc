@@ -3,6 +3,8 @@
 
 name: Release
 
+run-name: Release v${{ inputs.version }}
+
 on:
   workflow_dispatch:
     inputs:
