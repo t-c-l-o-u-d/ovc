@@ -1,4 +1,4 @@
-# ovc - OpenShift Client Version Manager
+# ovc - OpenShift Client Version Control
 
 A command-line tool for managing OpenShift 4 client versions.
 
