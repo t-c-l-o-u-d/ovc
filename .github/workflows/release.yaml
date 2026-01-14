@@ -1,26 +1,56 @@
 # GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
 # Release workflow
 
-name: Main
+name: Release
 
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.2.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  validate:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Version Format
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version format. Use semantic versioning (e.g., 1.2.0)"
+            exit 1
+          fi
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          if [[ "$VERSION" != "$CARGO_VERSION" ]]; then
+            echo "::error::Version mismatch. Input: $VERSION, Cargo.toml: $CARGO_VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   lint:
     name: Lint
+    needs: [validate]
     uses: ./.github/workflows/lint.yaml
 
   security:
     name: Security Audit
+    needs: [validate]
     uses: ./.github/workflows/security.yaml
 
   test:
     name: Test
+    needs: [validate]
     uses: ./.github/workflows/test.yaml
 
   build-matrix:
@@ -31,8 +61,6 @@ jobs:
         include:
           - arch: "linux-x86_64"
             runner: "ubuntu-latest"
-          #- arch: "linux-aarch64"
-          #  runner: "ubuntu-24.04-arm64"
           - arch: "macos-arm64"
             runner: "macos-latest"
     uses: ./.github/workflows/build.yaml
@@ -41,6 +69,23 @@ jobs:
       runner: ${{ matrix.runner }}
 
   publish:
-    name: Publish Release
-    needs: [build-matrix]
-    uses: ./.github/workflows/publish.yaml
+    name: Create Release
+    needs: [validate, build-matrix]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ovc-*
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ needs.validate.outputs.version }}" \
+            --title "v${{ needs.validate.outputs.version }}" \
+            --generate-notes \
+            ovc-linux-x86_64/ovc-linux-x86_64 \
+            ovc-macos-arm64/ovc-macos-arm64
