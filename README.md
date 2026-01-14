@@ -17,7 +17,7 @@ A command-line tool for managing OpenShift 4 client versions.
     mv ~/Downloads/ovc-* ~/.local/bin/ovc
     ```
 
-## Examples
+## Usage
 
 - Download latest patch version of 4.19
     ```bash
@@ -27,6 +27,11 @@ A command-line tool for managing OpenShift 4 client versions.
 - Download specific version
     ```bash
     ovc --list 4.14 | fzf | xargs ovc
+    ```
+
+- Enable bash completion
+    ```bash
+    source <(ovc --completion bash)
     ```
 
 ## References
