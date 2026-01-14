@@ -548,7 +548,7 @@ mod cli_basic_tests {
         let output = run_ovc(&["--help"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("openshift client version control"));
+        assert!(stdout.contains("OpenShift Client Version Control"));
         assert!(stdout.contains("-v, --verbose"));
         assert!(stdout.contains("list"));
         assert!(stdout.contains("installed"));
