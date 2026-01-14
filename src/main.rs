@@ -40,14 +40,16 @@ enum StandaloneAction {
     Update,
 }
 
+/// CLI argument parser - bools required for clap flag parsing
 #[derive(Parser)]
 #[command(
     name = "ovc",
     version,
-    about = "openshift client version control",
+    about = "OpenShift Client Version Control",
     disable_version_flag = true
 )]
 #[command(arg(clap::Arg::new("version").long("version").action(clap::ArgAction::Version).help("Print version")))]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Version to download
     #[arg(value_name = "VERSION")]
@@ -66,41 +68,33 @@ struct Cli {
     prune: Option<String>,
 
     /// Download the version matching the currently connected cluster
-    #[arg(short = 'm', long = "match-server", action = clap::ArgAction::Count, conflicts_with_all = ["update", "list", "installed", "prune"])]
-    match_server: u8,
+    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["update", "list", "installed", "prune"])]
+    match_server: bool,
 
     /// Update ovc to the latest version from GitHub releases
-    #[arg(short = 'u', long = "update", action = clap::ArgAction::Count, conflicts_with_all = ["match_server", "list", "installed", "prune"])]
-    update: u8,
+    #[arg(short = 'u', long = "update", conflicts_with_all = ["match_server", "list", "installed", "prune"])]
+    update: bool,
 
     /// Allow insecure TLS connections (skip certificate verification)
-    #[arg(short = 'k', long = "insecure", action = clap::ArgAction::Count)]
-    insecure: u8,
+    #[arg(short = 'k', long = "insecure")]
+    insecure: bool,
 
     /// Make the operation more talkative
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    verbose: u8,
+    #[arg(short, long)]
+    verbose: bool,
 
-    /// Generate shell completion script (usage: source <(ovc --completion bash))
+    /// Generate shell completion script (only bash is supported currently)
     #[arg(long = "completion", value_name = "SHELL", value_parser = parse_completion_shell)]
     completion: Option<String>,
 }
 
 impl Cli {
     fn standalone_action(&self) -> Option<StandaloneAction> {
-        match (self.match_server > 0, self.update > 0) {
+        match (self.match_server, self.update) {
             (true, _) => Some(StandaloneAction::MatchServer),
             (_, true) => Some(StandaloneAction::Update),
             _ => None,
         }
-    }
-
-    const fn is_verbose(&self) -> bool {
-        self.verbose > 0
-    }
-
-    const fn is_insecure(&self) -> bool {
-        self.insecure > 0
     }
 }
 
@@ -125,8 +119,8 @@ fn main() {
     }
 
     let standalone = cli.standalone_action();
-    let verbose = cli.is_verbose();
-    let insecure = cli.is_insecure();
+    let verbose = cli.verbose;
+    let insecure = cli.insecure;
 
     // Dispatch to appropriate command handler
     // Note: conflicts_with_all ensures mutual exclusivity at parse time
