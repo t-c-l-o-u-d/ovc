@@ -23,7 +23,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ubuntu-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-cargo-test-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: |
             ubuntu-cargo-test-
 
