@@ -56,6 +56,17 @@ struct Cli {
     /// Make the operation more talkative
     #[arg(short, long)]
     verbose: bool,
+
+    /// Generate shell completion script (usage: source <(ovc --completion bash))
+    #[arg(long = "completion", value_name = "SHELL", value_parser = parse_completion_shell)]
+    completion: Option<String>,
+}
+
+fn parse_completion_shell(s: &str) -> Result<String, String> {
+    match s.to_lowercase().as_str() {
+        "bash" => Ok(s.to_lowercase()),
+        _ => Err(format!("unsupported shell: {s} (only 'bash' is supported)")),
+    }
 }
 
 /// Main application entry point
@@ -64,6 +75,12 @@ struct Cli {
 /// Ensures only one action is specified at a time and provides proper error handling.
 fn main() {
     let cli = Cli::parse();
+
+    // Handle completion generation first (exits immediately)
+    if cli.completion.is_some() {
+        print_bash_completion();
+        return;
+    }
 
     // Count how many action flags are set to ensure mutual exclusivity
     let action_count = [
@@ -699,4 +716,55 @@ fn check_existing_oc_in_path() -> Option<PathBuf> {
     }
 
     None
+}
+
+/// Print bash completion script with descriptions
+fn print_bash_completion() {
+    print!(
+        r#"# bash completion for ovc
+
+_ovc_completions() {{
+    local cur prev opts
+    COMPREPLY=()
+    cur="${{COMP_WORDS[COMP_CWORD]}}"
+    prev="${{COMP_WORDS[COMP_CWORD-1]}}"
+
+    # Options with descriptions (format: "option:description")
+    local options=(
+        "-l:List available versions from the mirror"
+        "--list:List available versions from the mirror"
+        "-i:List installed versions"
+        "--installed:List installed versions"
+        "-p:Remove installed versions"
+        "--prune:Remove installed versions"
+        "-v:Make the operation more talkative"
+        "--verbose:Make the operation more talkative"
+        "--completion:Generate shell completion script"
+        "-h:Print help"
+        "--help:Print help"
+        "-V:Print version"
+        "--version:Print version"
+    )
+
+    if [[ "${{cur}}" == -* ]]; then
+        # Complete options with descriptions
+        local IFS=$'\n'
+        local completions=()
+        for opt in "${{options[@]}}"; do
+            local name="${{opt%%:*}}"
+            local desc="${{opt#*:}}"
+            if [[ "${{name}}" == "${{cur}}"* ]]; then
+                completions+=("$(printf "%-20s(%s)" "${{name}}" "${{desc}}")")
+            fi
+        done
+
+        if [[ ${{#completions[@]}} -gt 0 ]]; then
+            COMPREPLY=("${{completions[@]}}")
+        fi
+    fi
+}}
+
+complete -F _ovc_completions ovc
+"#
+    );
 }
