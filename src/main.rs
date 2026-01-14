@@ -63,6 +63,10 @@ struct Cli {
     #[arg(short = 'm', long = "match-server")]
     match_server: bool,
 
+    /// Allow insecure TLS connections (skip certificate verification)
+    #[arg(short = 'k', long = "insecure")]
+    insecure: bool,
+
     /// Make the operation more talkative
     #[arg(short, long)]
     verbose: bool,
@@ -113,7 +117,7 @@ fn main() {
     } else if let Some(version_pattern) = cli.prune {
         cmd_prune(&version_pattern, cli.verbose)
     } else if cli.match_server {
-        cmd_match_server(cli.verbose)
+        cmd_match_server(cli.verbose, cli.insecure)
     } else {
         // Default action: download, but require a version
         match cli.target_version {
@@ -344,7 +348,7 @@ fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>>
 ///
 /// Gets the console URL and downloads the oc binary from the cluster's downloads endpoint.
 /// This ensures the client version exactly matches the connected cluster.
-fn cmd_match_server(verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_match_server(verbose: bool, insecure: bool) -> Result<(), Box<dyn Error>> {
     // Check for existing oc binary in PATH before proceeding
     if let Some(existing_oc_path) = check_existing_oc_in_path() {
         return Err(format!(
@@ -365,7 +369,7 @@ fn cmd_match_server(verbose: bool) -> Result<(), Box<dyn Error>> {
     let bin_dir = get_bin_dir_with_platform(&platform)?;
     let temp_path = bin_dir.join("oc-cluster-temp");
 
-    download_oc_from_cluster(&download_url, &temp_path)?;
+    download_oc_from_cluster(&download_url, &temp_path, insecure)?;
 
     // Get the version from the downloaded binary
     let version = get_binary_version(&temp_path)?;
@@ -421,8 +425,12 @@ fn get_cluster_download_url(verbose: bool) -> Result<String, Box<dyn Error>> {
 }
 
 /// Download the oc binary from the cluster's downloads endpoint
-fn download_oc_from_cluster(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
-    let resp = reqwest::blocking::get(url)?;
+fn download_oc_from_cluster(url: &str, dest: &Path, insecure: bool) -> Result<(), Box<dyn Error>> {
+    let client = reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(insecure)
+        .build()?;
+
+    let resp = client.get(url).send()?;
 
     if !resp.status().is_success() {
         return Err(format!(
@@ -878,6 +886,8 @@ _ovc_completions() {{
             "--help          (Print help)"
             "-i              (List installed versions)"
             "--installed     (List installed versions)"
+            "--insecure      (Skip TLS certificate verification)"
+            "-k              (Skip TLS certificate verification)"
             "-l              (List available versions from the mirror)"
             "--list          (List available versions from the mirror)"
             "-m              (Download version matching connected cluster)"
