@@ -7,17 +7,30 @@ on:
   workflow_call:
 
 jobs:
-  lint:
-    name: Lint Code
+  fmt:
+    name: Check Formatting
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust Toolchain
         run: |
           rustup default stable
-          rustup component add rustfmt clippy
+          rustup component add rustfmt
+
+      - name: Check Formatting
+        run: cargo fmt --check --verbose
+
+  clippy:
+    name: Run Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        run: |
+          rustup default stable
+          rustup component add clippy
 
       - name: Cache Cargo Registry and Build
         uses: actions/cache@v4
@@ -26,12 +39,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ubuntu-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ubuntu-cargo-lint-
-
-      - name: Check Formatting
-        run: cargo fmt --check --verbose
+            ubuntu-cargo-clippy-
 
       - name: Run Clippy
         run: cargo clippy

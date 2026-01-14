@@ -32,16 +32,15 @@ jobs:
             restore-keys: |
               ${{ inputs.runner }}-cargo-release-
 
-        - name: Build and Test Release Binary
-          run: cargo test --release
-        
+        - name: Build Release Binary
+          run: cargo build --release
+
         - name: Strip Binary
           run: strip target/release/ovc
-        
+
         - name: Prepare Binary
-          run: |
-            cp target/release/ovc ovc-${{ inputs.arch }}
-        
+          run: cp target/release/ovc ovc-${{ inputs.arch }}
+
         - name: Upload Binary Artifact
           uses: actions/upload-artifact@v4
           with:

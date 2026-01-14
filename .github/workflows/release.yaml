@@ -3,7 +3,7 @@
 
 name: Main
 
-on: 
+on:
   release:
     types: [created]
 
@@ -12,16 +12,20 @@ permissions:
 
 jobs:
   lint:
-   name: Lint
-   uses: ./.github/workflows/lint.yaml
+    name: Lint
+    uses: ./.github/workflows/lint.yaml
 
   security:
-   name: Security Audit
-   uses: ./.github/workflows/security.yaml
+    name: Security Audit
+    uses: ./.github/workflows/security.yaml
+
+  test:
+    name: Test
+    uses: ./.github/workflows/test.yaml
 
   build-matrix:
     name: Build Binaries
-    needs: [lint, security]
+    needs: [lint, security, test]
     strategy:
       matrix:
         include:

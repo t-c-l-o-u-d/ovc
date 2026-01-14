@@ -3,7 +3,7 @@
 
 name: Lint and Security Audit
 
-on: 
+on:
   push:
     branches: [main]
 
@@ -15,3 +15,7 @@ jobs:
   security:
     name: Security Audit
     uses: ./.github/workflows/security.yaml
+
+  test:
+    name: Test
+    uses: ./.github/workflows/test.yaml
