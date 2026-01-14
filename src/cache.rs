@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{Platform, compare_versions};
@@ -33,17 +33,25 @@ pub struct VersionInfo {
 pub struct VersionCache {
     /// List of available versions with platform URLs
     versions: Vec<VersionInfo>,
-    /// Timestamp when the cache was created (for informational purposes)
-    timestamp: DateTime<Utc>,
+    /// Unix timestamp (seconds since epoch) when the cache was created
+    timestamp: u64,
 }
 
-/// Legacy cache structure for backward compatibility
+/// Legacy cache structure for backward compatibility with chrono timestamps
 #[derive(Serialize, Deserialize)]
 struct LegacyVersionCache {
     /// List of available versions (old format)
     versions: Vec<String>,
-    /// Timestamp when the cache was created
-    timestamp: DateTime<Utc>,
+    /// Chrono timestamp (kept for deserializing old caches)
+    timestamp: String,
+}
+
+/// Get current Unix timestamp (seconds since epoch)
+fn current_unix_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 impl VersionCache {
@@ -55,7 +63,7 @@ impl VersionCache {
     pub fn new(versions: Vec<VersionInfo>) -> Self {
         Self {
             versions,
-            timestamp: Utc::now(),
+            timestamp: current_unix_timestamp(),
         }
     }
 
@@ -97,13 +105,13 @@ impl VersionCache {
         self.versions.iter().any(|v| v.version == version)
     }
 
-    /// Get the cache timestamp
+    /// Get the cache timestamp (Unix seconds)
     ///
     /// # Returns
-    /// Reference to the cache creation timestamp
+    /// Unix timestamp when cache was created
     #[must_use]
-    pub fn timestamp(&self) -> &DateTime<Utc> {
-        &self.timestamp
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
     }
 }
 
@@ -159,14 +167,11 @@ pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
         return Ok(Some(cache));
     }
 
-    // Try to load legacy format and migrate
+    // Try to load legacy format and migrate (uses current timestamp since old format varies)
     if let Ok(legacy_cache) = serde_json::from_str::<LegacyVersionCache>(&content) {
-        // Migrate to new format
+        // Migrate to new format with current timestamp
         let version_info = build_version_info(&legacy_cache.versions);
-        let new_cache = VersionCache {
-            versions: version_info,
-            timestamp: legacy_cache.timestamp,
-        };
+        let new_cache = VersionCache::new(version_info);
 
         // Save the migrated cache
         if save_cached_versions(&new_cache.versions).is_err() {
@@ -304,21 +309,25 @@ pub fn update_cache_for_missing_version(
 /// Shows how long ago the cache was created.
 ///
 /// # Arguments
-/// * `timestamp` - Cache creation timestamp
+/// * `timestamp` - Unix timestamp (seconds since epoch)
 ///
 /// # Returns
 /// Human-readable age (e.g. "2h ago" or "30m ago")
 #[must_use]
-pub fn format_cache_age(timestamp: &DateTime<Utc>) -> String {
-    let now = Utc::now();
-    let age = now.signed_duration_since(*timestamp);
+pub fn format_cache_age(timestamp: u64) -> String {
+    let now = current_unix_timestamp();
+    let age_secs = now.saturating_sub(timestamp);
 
-    if age.num_hours() > 0 {
-        format!("{}h ago", age.num_hours())
-    } else if age.num_minutes() > 0 {
-        format!("{}m ago", age.num_minutes())
+    let hours = age_secs / 3600;
+    let minutes = (age_secs % 3600) / 60;
+    let seconds = age_secs % 60;
+
+    if hours > 0 {
+        format!("{hours}h ago")
+    } else if minutes > 0 {
+        format!("{minutes}m ago")
     } else {
-        format!("{}s ago", age.num_seconds().max(0))
+        format!("{seconds}s ago")
     }
 }
 
