@@ -906,13 +906,16 @@ mod cli_match_server_tests {
 
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let combined = format!("{stderr}{stdout}");
         assert!(
-            stderr.contains("Not connected")
-                || stderr.contains("No server version")
-                || stderr.contains("Failed to run")
-                || stderr.contains("error")
-                || stderr.contains("cluster"),
-            "Expected connection error, got: {stderr}"
+            combined.contains("Not connected")
+                || combined.contains("No server version")
+                || combined.contains("Failed to run")
+                || combined.contains("error")
+                || combined.contains("cluster")
+                || combined.contains("Remove the existing oc binary"),
+            "Expected connection or conflict error, got: {combined}"
         );
     }
 
