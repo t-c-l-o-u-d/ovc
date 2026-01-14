@@ -35,7 +35,13 @@ use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stab
 
 /// Command line interface structure
 #[derive(Parser)]
-#[command(name = "ovc", version, about = "openshift client version control")]
+#[command(
+    name = "ovc",
+    version,
+    about = "openshift client version control",
+    disable_version_flag = true
+)]
+#[command(arg(clap::Arg::new("version").long("version").action(clap::ArgAction::Version).help("Print version")))]
 struct Cli {
     /// Version to download
     #[arg(value_name = "VERSION")]
@@ -742,7 +748,6 @@ _ovc_completions() {{
             "--prune       (Remove installed versions)"
             "-v            (Make the operation more talkative)"
             "--verbose     (Make the operation more talkative)"
-            "-V            (Print version)"
             "--version     (Print version)"
         )
 
