@@ -667,22 +667,36 @@ fn create_symlink(target: &Path, link: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Check for existing oc binary in PATH using the which crate
+/// Check for existing oc binary in PATH
 /// Ignores the oc binary in ~/.local/bin since that's managed by ovc itself.
 /// # Returns: `Some(path)` if an oc binary is found in PATH (excluding ~/.local/bin), `None` otherwise
 fn check_existing_oc_in_path() -> Option<PathBuf> {
-    let path = which::which("oc").ok()?;
-
-    // Get the ~/.local/bin directory to exclude it from conflicts
+    let path_var = std::env::var("PATH").ok()?;
     let home = std::env::var("HOME").ok()?;
     let local_bin = PathBuf::from(&home).join(".local/bin");
 
-    // If the found oc binary is in ~/.local/bin, ignore it (managed by ovc)
-    if let Some(parent) = path.parent()
-        && parent == local_bin
-    {
-        return None;
+    for dir in path_var.split(':') {
+        if dir.is_empty() {
+            continue;
+        }
+
+        let candidate = Path::new(dir).join("oc");
+
+        // Skip if this is in ~/.local/bin (managed by ovc)
+        if Path::new(dir) == local_bin {
+            continue;
+        }
+
+        // Check if the file exists and is executable
+        if candidate.is_file() {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = candidate.metadata()
+                && metadata.permissions().mode() & 0o111 != 0
+            {
+                return Some(candidate);
+            }
+        }
     }
 
-    Some(path)
+    None
 }
