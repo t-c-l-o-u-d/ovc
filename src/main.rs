@@ -33,7 +33,13 @@ use ovc::cache::{
 };
 use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version};
 
-/// Command line interface structure
+/// Standalone actions that don't require a version argument
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StandaloneAction {
+    MatchServer,
+    Update,
+}
+
 #[derive(Parser)]
 #[command(
     name = "ovc",
@@ -60,20 +66,42 @@ struct Cli {
     prune: Option<String>,
 
     /// Download the version matching the currently connected cluster
-    #[arg(short = 'm', long = "match-server")]
-    match_server: bool,
+    #[arg(short = 'm', long = "match-server", action = clap::ArgAction::Count, conflicts_with_all = ["update", "list", "installed", "prune"])]
+    match_server: u8,
+
+    /// Update ovc to the latest version from GitHub releases
+    #[arg(short = 'u', long = "update", action = clap::ArgAction::Count, conflicts_with_all = ["match_server", "list", "installed", "prune"])]
+    update: u8,
 
     /// Allow insecure TLS connections (skip certificate verification)
-    #[arg(short = 'k', long = "insecure")]
-    insecure: bool,
+    #[arg(short = 'k', long = "insecure", action = clap::ArgAction::Count)]
+    insecure: u8,
 
     /// Make the operation more talkative
-    #[arg(short, long)]
-    verbose: bool,
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 
     /// Generate shell completion script (usage: source <(ovc --completion bash))
     #[arg(long = "completion", value_name = "SHELL", value_parser = parse_completion_shell)]
     completion: Option<String>,
+}
+
+impl Cli {
+    fn standalone_action(&self) -> Option<StandaloneAction> {
+        match (self.match_server > 0, self.update > 0) {
+            (true, _) => Some(StandaloneAction::MatchServer),
+            (_, true) => Some(StandaloneAction::Update),
+            _ => None,
+        }
+    }
+
+    const fn is_verbose(&self) -> bool {
+        self.verbose > 0
+    }
+
+    const fn is_insecure(&self) -> bool {
+        self.insecure > 0
+    }
 }
 
 fn parse_completion_shell(s: &str) -> Result<String, String> {
@@ -96,32 +124,27 @@ fn main() {
         return;
     }
 
-    // Count how many action flags are set to ensure mutual exclusivity
-    let action_count = [
-        cli.list.is_some(),
-        cli.installed.is_some(),
-        cli.prune.is_some(),
-        cli.match_server,
-    ]
-    .iter()
-    .filter(|&&x| x)
-    .count();
+    let standalone = cli.standalone_action();
+    let verbose = cli.is_verbose();
+    let insecure = cli.is_insecure();
 
     // Dispatch to appropriate command handler
-    let result = if action_count > 1 {
-        Err("Only one action can be specified at a time".into())
-    } else if let Some(version_pattern) = cli.list {
-        cmd_list_available(&version_pattern, cli.verbose)
+    // Note: conflicts_with_all ensures mutual exclusivity at parse time
+    let result = if let Some(version_pattern) = cli.list {
+        cmd_list_available(&version_pattern, verbose)
     } else if let Some(version_pattern) = cli.installed {
-        cmd_list_installed(&version_pattern, cli.verbose)
+        cmd_list_installed(&version_pattern, verbose)
     } else if let Some(version_pattern) = cli.prune {
-        cmd_prune(&version_pattern, cli.verbose)
-    } else if cli.match_server {
-        cmd_match_server(cli.verbose, cli.insecure)
+        cmd_prune(&version_pattern, verbose)
+    } else if let Some(action) = standalone {
+        match action {
+            StandaloneAction::MatchServer => cmd_match_server(verbose, insecure),
+            StandaloneAction::Update => cmd_update(verbose),
+        }
     } else {
         // Default action: download, but require a version
         match cli.target_version {
-            Some(version) => cmd_download(Some(version), cli.verbose),
+            Some(version) => cmd_download(Some(version), verbose),
             None => Err("ovc: missing version\nTry 'ovc --help' for more information.".into()),
         }
     };
@@ -389,6 +412,153 @@ fn cmd_match_server(verbose: bool, insecure: bool) -> Result<(), Box<dyn Error>>
         eprintln!("Installed and set as default: {version}");
         check_path_warnings(verbose);
     }
+
+    Ok(())
+}
+
+/// GitHub repository owner
+const GITHUB_OWNER: &str = "t-c-l-o-u-d";
+/// GitHub repository name
+const GITHUB_REPO: &str = "ovc";
+
+/// Update ovc to the latest version from GitHub releases
+///
+/// Checks the latest release on GitHub and updates if a newer version is available.
+/// If already on the latest version, prints a message and shows the current version.
+fn cmd_update(verbose: bool) -> Result<(), Box<dyn Error>> {
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    if verbose {
+        eprintln!("Current version: {current_version}");
+        eprintln!("Checking for updates...");
+    }
+
+    let (latest_version, download_url) = get_latest_github_release(verbose)?;
+
+    if verbose {
+        eprintln!("Latest version: {latest_version}");
+    }
+
+    // Compare versions
+    if compare_versions(&latest_version, current_version) != std::cmp::Ordering::Greater {
+        println!("ovc is already up to date (version {current_version})");
+        return Ok(());
+    }
+
+    if verbose {
+        eprintln!("Downloading update from: {download_url}");
+    }
+
+    // Get the path to the current executable
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current executable path: {e}"))?;
+
+    // Download to a temporary file
+    let temp_path = current_exe.with_extension("update");
+    download_update(&download_url, &temp_path)?;
+
+    // Replace current binary with the new one
+    replace_binary(&temp_path, &current_exe)?;
+
+    println!("Updated ovc from {current_version} to {latest_version}");
+    Ok(())
+}
+
+/// Fetch the latest release information from GitHub
+fn get_latest_github_release(verbose: bool) -> Result<(String, String), Box<dyn Error>> {
+    let api_url =
+        format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest");
+
+    if verbose {
+        eprintln!("Fetching release info from: {api_url}");
+    }
+
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
+        .build()?;
+
+    let resp = client.get(&api_url).send()?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Failed to fetch release info: {} ({})",
+            api_url,
+            resp.status()
+        )
+        .into());
+    }
+
+    let release: serde_json::Value = resp.json()?;
+
+    // Get the tag name (version)
+    let tag_name = release["tag_name"]
+        .as_str()
+        .ok_or("No tag_name in release")?;
+
+    // Strip 'v' prefix if present
+    let version = tag_name.strip_prefix('v').unwrap_or(tag_name);
+
+    // Find the linux-x86_64 asset
+    let assets = release["assets"].as_array().ok_or("No assets in release")?;
+
+    let download_url = assets
+        .iter()
+        .find_map(|asset| {
+            let name = asset["name"].as_str()?;
+            if name.contains("linux") && (name.contains("x86_64") || name.contains("amd64")) {
+                asset["browser_download_url"].as_str().map(String::from)
+            } else {
+                None
+            }
+        })
+        .ok_or("No linux-x86_64 binary found in release assets")?;
+
+    Ok((version.to_string(), download_url))
+}
+
+/// Download the update binary
+fn download_update(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
+        .build()?;
+
+    let resp = client.get(url).send()?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Failed to download update: {} ({})", url, resp.status()).into());
+    }
+
+    let bytes = resp.bytes()?;
+    fs::write(dest, &bytes)?;
+    set_executable(&dest.to_path_buf())?;
+
+    Ok(())
+}
+
+/// Replace the current binary with the new one
+fn replace_binary(new_binary: &Path, current_binary: &Path) -> Result<(), Box<dyn Error>> {
+    // On Unix, we can replace a running binary by:
+    // 1. Rename current to .old
+    // 2. Move new to current location
+    // 3. Remove .old
+    let old_path = current_binary.with_extension("old");
+
+    // Remove old backup if it exists
+    let _ = fs::remove_file(&old_path);
+
+    // Rename current to .old
+    fs::rename(current_binary, &old_path)
+        .map_err(|e| format!("Failed to backup current binary: {e}"))?;
+
+    // Move new binary to current location
+    if let Err(e) = fs::rename(new_binary, current_binary) {
+        // Try to restore the old binary
+        let _ = fs::rename(&old_path, current_binary);
+        return Err(format!("Failed to install new binary: {e}").into());
+    }
+
+    // Remove old binary
+    let _ = fs::remove_file(&old_path);
 
     Ok(())
 }
@@ -894,6 +1064,8 @@ _ovc_completions() {{
             "--match-server  (Download version matching connected cluster)"
             "-p              (Remove installed versions)"
             "--prune         (Remove installed versions)"
+            "-u              (Update ovc to latest version)"
+            "--update        (Update ovc to latest version)"
             "-v              (Make the operation more talkative)"
             "--verbose       (Make the operation more talkative)"
             "--version       (Print version)"

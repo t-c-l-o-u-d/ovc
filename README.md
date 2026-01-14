@@ -39,5 +39,10 @@ A command-line tool for managing OpenShift 4 client versions.
     source <(ovc --completion bash)
     ```
 
+- Update ovc to the latest release
+    ```bash
+    ovc --update
+    ```
+
 ## References
 - https://mirror.openshift.com/pub/openshift-v4/OpenShift_Release_Types.pdf
