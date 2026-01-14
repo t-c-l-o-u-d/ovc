@@ -386,7 +386,7 @@ fn cmd_match_server(verbose: bool, insecure: bool) -> Result<(), Box<dyn Error>>
     let bin_dir = get_bin_dir_with_platform(&platform)?;
     let temp_path = bin_dir.join("oc-cluster-temp");
 
-    download_oc_from_cluster(&download_url, &temp_path, insecure)?;
+    download_oc_from_cluster(&download_url, &temp_path, insecure, verbose)?;
 
     // Get the version from the downloaded binary
     let version = get_binary_version(&temp_path)?;
@@ -589,12 +589,35 @@ fn get_cluster_download_url(verbose: bool) -> Result<String, Box<dyn Error>> {
 }
 
 /// Download the oc binary from the cluster's downloads endpoint
-fn download_oc_from_cluster(url: &str, dest: &Path, insecure: bool) -> Result<(), Box<dyn Error>> {
+fn download_oc_from_cluster(
+    url: &str,
+    dest: &Path,
+    insecure: bool,
+    verbose: bool,
+) -> Result<(), Box<dyn Error>> {
     let client = reqwest::blocking::Client::builder()
         .danger_accept_invalid_certs(insecure)
         .build()?;
 
-    let resp = client.get(url).send()?;
+    let resp = match client.get(url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            if verbose && e.is_connect() {
+                let err_str = e.to_string().to_lowercase();
+                if err_str.contains("certificate")
+                    || err_str.contains("ssl")
+                    || err_str.contains("tls")
+                {
+                    eprintln!(
+                        "Connection failed due to untrusted TLS certificate.\n\
+                         The cluster may be using a self-signed certificate.\n\
+                         Use --insecure (-k) to skip certificate verification."
+                    );
+                }
+            }
+            return Err(e.into());
+        }
+    };
 
     if !resp.status().is_success() {
         return Err(format!(
