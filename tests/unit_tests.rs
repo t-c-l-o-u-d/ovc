@@ -6,9 +6,42 @@
 //! and functionality.
 
 use ovc::*;
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tempfile::TempDir;
+
+/// Simple temporary directory that cleans up on drop
+struct TestTempDir {
+    path: PathBuf,
+}
+
+impl TestTempDir {
+    fn new() -> std::io::Result<Self> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+
+        let random_suffix = std::process::id();
+        let dir_name = format!("ovc_test_{timestamp}_{random_suffix}");
+        let path = std::env::temp_dir().join(dir_name);
+
+        fs::create_dir_all(&path)?;
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for TestTempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
 
 // Helper function to run ovc command and capture output
 fn run_ovc(args: &[&str]) -> std::process::Output {
@@ -747,7 +780,7 @@ mod cli_installed_tests {
     #[test]
     fn test_installed_command_empty() {
         // Create a temporary directory to test with clean state
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TestTempDir::new().unwrap();
         let home_dir = temp_dir.path();
 
         // Set HOME to temp directory
