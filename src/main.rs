@@ -718,53 +718,52 @@ fn check_existing_oc_in_path() -> Option<PathBuf> {
     None
 }
 
-/// Print bash completion script with descriptions
+/// Print bash completion script
 fn print_bash_completion() {
     print!(
         r#"# bash completion for ovc
 
 _ovc_completions() {{
-    local cur prev opts
+    local cur prev
     COMPREPLY=()
     cur="${{COMP_WORDS[COMP_CWORD]}}"
     prev="${{COMP_WORDS[COMP_CWORD-1]}}"
 
-    # Options with descriptions (format: "option:description")
-    local options=(
-        "-l:List available versions from the mirror"
-        "--list:List available versions from the mirror"
-        "-i:List installed versions"
-        "--installed:List installed versions"
-        "-p:Remove installed versions"
-        "--prune:Remove installed versions"
-        "-v:Make the operation more talkative"
-        "--verbose:Make the operation more talkative"
-        "--completion:Generate shell completion script"
-        "-h:Print help"
-        "--help:Print help"
-        "-V:Print version"
-        "--version:Print version"
-    )
-
     if [[ "${{cur}}" == -* ]]; then
-        # Complete options with descriptions
+        local options=(
+            "--completion  (Generate shell completion script)"
+            "-h            (Print help)"
+            "--help        (Print help)"
+            "-i            (List installed versions)"
+            "--installed   (List installed versions)"
+            "-l            (List available versions from the mirror)"
+            "--list        (List available versions from the mirror)"
+            "-p            (Remove installed versions)"
+            "--prune       (Remove installed versions)"
+            "-v            (Make the operation more talkative)"
+            "--verbose     (Make the operation more talkative)"
+            "-V            (Print version)"
+            "--version     (Print version)"
+        )
+
         local IFS=$'\n'
-        local completions=()
+        local opt name padded
+        local width=$((COLUMNS - 1))
         for opt in "${{options[@]}}"; do
-            local name="${{opt%%:*}}"
-            local desc="${{opt#*:}}"
-            if [[ "${{name}}" == "${{cur}}"* ]]; then
-                completions+=("$(printf "%-20s(%s)" "${{name}}" "${{desc}}")")
+            name="${{opt%%  *}}"
+            if [[ "$name" == "${{cur}}"* ]]; then
+                printf -v padded "%-${{width}}s" "$opt"
+                COMPREPLY+=("$padded")
             fi
         done
 
-        if [[ ${{#completions[@]}} -gt 0 ]]; then
-            COMPREPLY=("${{completions[@]}}")
+        if ((${{#COMPREPLY[@]}} == 1)); then
+            COMPREPLY[0]="${{COMPREPLY[0]%%  *}}"
         fi
     fi
 }}
 
-complete -F _ovc_completions ovc
+complete -o nosort -F _ovc_completions ovc
 "#
     );
 }
