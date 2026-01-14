@@ -14,6 +14,16 @@ setup_rust() {
     rustup component add rustfmt clippy
 }
 
+install_tools() {
+    step "Installing cargo-audit and cargo-deny in parallel"
+    cargo install --locked cargo-audit &
+    local audit_pid=$!
+    cargo install --locked cargo-deny &
+    local deny_pid=$!
+    wait $audit_pid || exit 1
+    wait $deny_pid || exit 1
+}
+
 check_format() {
     step "Checking formatting"
     cargo fmt --check --verbose
@@ -25,15 +35,11 @@ run_clippy() {
 }
 
 run_audit() {
-    step "Installing cargo-audit"
-    command -v cargo-audit || cargo install --locked cargo-audit
     step "Running cargo audit"
     cargo audit
 }
 
 run_deny() {
-    step "Installing cargo-deny"
-    command -v cargo-deny || cargo install --locked cargo-deny
     step "Running cargo deny"
     cargo deny check advisories bans sources
 }
@@ -57,6 +63,7 @@ main() {
     local arch="${1:-linux-x86_64}"
 
     setup_rust
+    install_tools
     check_format
     run_clippy
     run_audit
