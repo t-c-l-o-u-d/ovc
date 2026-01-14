@@ -7,8 +7,8 @@ on:
   workflow_call:
 
 jobs:
-  security:
-    name: Security Audit
+  audit:
+    name: Cargo Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,14 +20,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin
-          key: ubuntu-cargo-bin-audit-deny-v1
+          key: ubuntu-cargo-bin-audit-v1
 
-      - name: Install cargo-audit and cargo-deny
-        run: |
-          command -v cargo-audit || cargo install cargo-audit
-          command -v cargo-deny || cargo install cargo-deny
+      - name: Install cargo-audit
+        run: command -v cargo-audit || cargo install cargo-audit
 
-      - name: Run cargo audit and cargo deny
-        run: |
-          cargo audit
-          cargo deny check advisories bans sources
+      - name: Run cargo audit
+        run: cargo audit
+
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        run: rustup default stable
+
+      - name: Cache Cargo Bin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ubuntu-cargo-bin-deny-v1
+
+      - name: Install cargo-deny
+        run: command -v cargo-deny || cargo install cargo-deny
+
+      - name: Run cargo deny
+        run: cargo deny check advisories bans sources
