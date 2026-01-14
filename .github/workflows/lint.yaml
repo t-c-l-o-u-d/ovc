@@ -32,8 +32,9 @@ jobs:
           rustup default stable
           rustup component add clippy
 
-      - name: Cache Cargo Registry and Build
-        uses: actions/cache@v4
+      - name: Restore Cargo Cache
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
@@ -45,3 +46,20 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy
+
+      - name: Save Cargo Cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-cargo-clippy-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: Delete Old Caches
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --json id,key --jq '.[] | select(.key | startswith("ubuntu-cargo-clippy-")) | select(.key != "ubuntu-cargo-clippy-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}") | .id' | xargs -I {} gh cache delete {} || true

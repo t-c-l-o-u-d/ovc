@@ -21,8 +21,9 @@ jobs:
         - name: Set Rust Toolchain to Stable
           run: rustup default stable
 
-        - name: Cache Cargo Registry and Build
-          uses: actions/cache@v4
+        - name: Restore Cargo Cache
+          id: cache
+          uses: actions/cache/restore@v4
           with:
             path: |
               ~/.cargo/registry
@@ -46,3 +47,20 @@ jobs:
           with:
             name: ovc-${{ inputs.arch }}
             path: ovc-${{ inputs.arch }}
+
+        - name: Save Cargo Cache
+          if: steps.cache.outputs.cache-hit != 'true'
+          uses: actions/cache/save@v4
+          with:
+            path: |
+              ~/.cargo/registry
+              ~/.cargo/git
+              target
+            key: ${{ inputs.runner }}-cargo-release-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+        - name: Delete Old Caches
+          if: always()
+          env:
+            GH_TOKEN: ${{ github.token }}
+          run: |
+            gh cache list --json id,key --jq '.[] | select(.key | startswith("${{ inputs.runner }}-cargo-release-")) | select(.key != "${{ inputs.runner }}-cargo-release-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}") | .id' | xargs -I {} gh cache delete {} || true
