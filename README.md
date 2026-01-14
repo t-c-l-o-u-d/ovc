@@ -29,6 +29,11 @@ A command-line tool for managing OpenShift 4 client versions.
     ovc --list 4.14 | fzf | xargs ovc
     ```
 
+- Match connected cluster version
+    ```bash
+    ovc -m
+    ```
+
 - Enable bash completion
     ```bash
     source <(ovc --completion bash)

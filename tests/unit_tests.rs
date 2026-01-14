@@ -888,6 +888,72 @@ mod cli_prune_tests {
 }
 
 #[cfg(test)]
+mod cli_match_server_tests {
+    use super::*;
+
+    #[test]
+    fn test_match_server_no_connection() {
+        // When not connected to a cluster, should fail with appropriate error
+        let temp_dir = TestTempDir::new().unwrap();
+        let home_dir = temp_dir.path();
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--match-server"])
+            .env("HOME", home_dir)
+            .env("KUBECONFIG", home_dir.join("nonexistent"))
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Not connected")
+                || stderr.contains("No server version")
+                || stderr.contains("Failed to run")
+                || stderr.contains("error")
+                || stderr.contains("cluster"),
+            "Expected connection error, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_match_server_help_shows_flag() {
+        let output = run_ovc(&["--help"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("-m"), "Help should show -m flag");
+        assert!(
+            stdout.contains("--match-server"),
+            "Help should show --match-server flag"
+        );
+    }
+
+    #[test]
+    fn test_match_server_mutual_exclusivity_with_list() {
+        let output = run_ovc(&["--match-server", "--list", "4.19"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Only one action can be specified"));
+    }
+
+    #[test]
+    fn test_match_server_mutual_exclusivity_with_prune() {
+        let output = run_ovc(&["--match-server", "--prune", "4.19"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Only one action can be specified"));
+    }
+
+    #[test]
+    fn test_match_server_mutual_exclusivity_with_installed() {
+        let output = run_ovc(&["--match-server", "--installed", "4.19"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Only one action can be specified"));
+    }
+}
+
+#[cfg(test)]
 mod cli_behavior_tests {
     use super::*;
 
