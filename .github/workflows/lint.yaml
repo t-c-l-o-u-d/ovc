@@ -13,14 +13,25 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Rust Toolchain
         run: |
           rustup default stable
           rustup component add rustfmt clippy
-      
+
+      - name: Cache Cargo Registry and Build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ubuntu-cargo-lint-
+
       - name: Check Formatting
         run: cargo fmt --check --verbose
-      
+
       - name: Run Clippy
         run: cargo clippy

@@ -17,12 +17,11 @@ jobs:
 
   security:
    name: Security Audit
-   needs: [lint]
    uses: ./.github/workflows/security.yaml
 
   build-matrix:
     name: Build Binaries
-    needs: [security]
+    needs: [lint, security]
     strategy:
       matrix:
         include:
