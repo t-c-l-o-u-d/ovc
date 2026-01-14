@@ -29,9 +29,9 @@ jobs:
               ~/.cargo/registry
               ~/.cargo/git
               target
-            key: ${{ inputs.runner }}-cargo-release-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+            key: ${{ inputs.runner }}-cargo-release-v2-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
             restore-keys: |
-              ${{ inputs.runner }}-cargo-release-
+              ${{ inputs.runner }}-cargo-release-v2-
 
         - name: Build Release Binary
           run: cargo build --release
@@ -56,11 +56,11 @@ jobs:
               ~/.cargo/registry
               ~/.cargo/git
               target
-            key: ${{ inputs.runner }}-cargo-release-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+            key: ${{ inputs.runner }}-cargo-release-v2-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
 
         - name: Delete Old Caches
           if: always()
           env:
             GH_TOKEN: ${{ github.token }}
           run: |
-            gh cache list --json id,key --jq '.[] | select(.key | startswith("${{ inputs.runner }}-cargo-release-")) | select(.key != "${{ inputs.runner }}-cargo-release-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}") | .id' | xargs -I {} gh cache delete {} || true
+            gh cache list --json id,key --jq '.[] | select(.key | startswith("${{ inputs.runner }}-cargo-release-")) | .id' | xargs -I {} gh cache delete {} || true
