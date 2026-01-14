@@ -19,7 +19,7 @@ use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::exit;
+use std::process::{Command, exit};
 
 use clap::Parser;
 use flate2::read::GzDecoder;
@@ -59,6 +59,10 @@ struct Cli {
     #[arg(short = 'p', long = "prune", value_name = "VERSION")]
     prune: Option<String>,
 
+    /// Download the version matching the currently connected cluster
+    #[arg(short = 'm', long = "match-server")]
+    match_server: bool,
+
     /// Make the operation more talkative
     #[arg(short, long)]
     verbose: bool,
@@ -93,6 +97,7 @@ fn main() {
         cli.list.is_some(),
         cli.installed.is_some(),
         cli.prune.is_some(),
+        cli.match_server,
     ]
     .iter()
     .filter(|&&x| x)
@@ -107,6 +112,8 @@ fn main() {
         cmd_list_installed(&version_pattern, cli.verbose)
     } else if let Some(version_pattern) = cli.prune {
         cmd_prune(&version_pattern, cli.verbose)
+    } else if cli.match_server {
+        cmd_match_server(cli.verbose)
     } else {
         // Default action: download, but require a version
         match cli.target_version {
@@ -331,6 +338,56 @@ fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>>
     }
 
     Ok(())
+}
+
+/// Download and install the version matching the currently connected cluster
+///
+/// Queries the connected OpenShift cluster for its version using `oc version`
+/// and downloads the matching client version. Requires an active cluster connection.
+fn cmd_match_server(verbose: bool) -> Result<(), Box<dyn Error>> {
+    let server_version = get_server_version(verbose)?;
+
+    if verbose {
+        eprintln!("Server version detected: {server_version}");
+    }
+
+    cmd_download(Some(server_version), verbose)
+}
+
+/// Get the server version from the currently connected OpenShift cluster
+///
+/// Runs `oc version -o json` and extracts the server's openshiftVersion.
+fn get_server_version(verbose: bool) -> Result<String, Box<dyn Error>> {
+    let output = Command::new("oc")
+        .args(["version", "-o", "json"])
+        .output()
+        .map_err(|e| format!("Failed to run 'oc': {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Not connected to a cluster. Run 'oc login' first.\n{stderr}").into());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    if verbose {
+        eprintln!("oc version output:\n{stdout}");
+    }
+
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse oc version JSON: {e}"))?;
+
+    // Try serverVersion.openshiftVersion first (OpenShift cluster)
+    if let Some(version) = json
+        .get("serverVersion")
+        .and_then(|sv| sv.get("openshiftVersion"))
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.is_empty())
+    {
+        return Ok(version.to_string());
+    }
+
+    Err("No server version found. Are you connected to an OpenShift cluster?".into())
 }
 
 /// Check for common PATH and installation issues
@@ -737,18 +794,20 @@ _ovc_completions() {{
 
     if [[ "${{cur}}" == -* ]]; then
         local options=(
-            "--completion  (Generate shell completion script)"
-            "-h            (Print help)"
-            "--help        (Print help)"
-            "-i            (List installed versions)"
-            "--installed   (List installed versions)"
-            "-l            (List available versions from the mirror)"
-            "--list        (List available versions from the mirror)"
-            "-p            (Remove installed versions)"
-            "--prune       (Remove installed versions)"
-            "-v            (Make the operation more talkative)"
-            "--verbose     (Make the operation more talkative)"
-            "--version     (Print version)"
+            "--completion    (Generate shell completion script)"
+            "-h              (Print help)"
+            "--help          (Print help)"
+            "-i              (List installed versions)"
+            "--installed     (List installed versions)"
+            "-l              (List available versions from the mirror)"
+            "--list          (List available versions from the mirror)"
+            "-m              (Download version matching connected cluster)"
+            "--match-server  (Download version matching connected cluster)"
+            "-p              (Remove installed versions)"
+            "--prune         (Remove installed versions)"
+            "-v              (Make the operation more talkative)"
+            "--verbose       (Make the operation more talkative)"
+            "--version       (Print version)"
         )
 
         local IFS=$'\n'
