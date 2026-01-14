@@ -66,24 +66,17 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/test.yaml
 
-  build-matrix:
-    name: Build Binaries
+  build:
+    name: Build Binary
     needs: [lint, security, test]
-    strategy:
-      matrix:
-        include:
-          - arch: "linux-x86_64"
-            runner: "ubuntu-latest"
-          - arch: "macos-arm64"
-            runner: "macos-latest"
     uses: ./.github/workflows/build.yaml
     with:
-      arch: ${{ matrix.arch }}
-      runner: ${{ matrix.runner }}
+      arch: "linux-x86_64"
+      runner: "ubuntu-latest"
 
   publish:
     name: Create Release
-    needs: [validate, build-matrix]
+    needs: [validate, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,5 +93,4 @@ jobs:
           gh release create "v${{ needs.validate.outputs.version }}" \
             --title "v${{ needs.validate.outputs.version }}" \
             --generate-notes \
-            ovc-linux-x86_64/ovc-linux-x86_64 \
-            ovc-macos-arm64/ovc-macos-arm64
+            ovc-linux-x86_64/ovc-linux-x86_64
