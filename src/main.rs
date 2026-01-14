@@ -340,26 +340,62 @@ fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-/// Download and install the version matching the currently connected cluster
+/// Download and install the oc binary directly from the connected cluster
 ///
-/// Queries the connected OpenShift cluster for its version using `oc version`
-/// and downloads the matching client version. Requires an active cluster connection.
+/// Gets the console URL and downloads the oc binary from the cluster's downloads endpoint.
+/// This ensures the client version exactly matches the connected cluster.
 fn cmd_match_server(verbose: bool) -> Result<(), Box<dyn Error>> {
-    let server_version = get_server_version(verbose)?;
-
-    if verbose {
-        eprintln!("Server version detected: {server_version}");
+    // Check for existing oc binary in PATH before proceeding
+    if let Some(existing_oc_path) = check_existing_oc_in_path() {
+        return Err(format!(
+            "Error: Remove the existing oc binary found in ${{PATH}}: {}",
+            existing_oc_path.display()
+        )
+        .into());
     }
 
-    cmd_download(Some(server_version), verbose)
+    let download_url = get_cluster_download_url(verbose)?;
+
+    if verbose {
+        eprintln!("Downloading from cluster: {download_url}");
+    }
+
+    // Download to a temporary location first
+    let platform = Platform::detect();
+    let bin_dir = get_bin_dir_with_platform(&platform)?;
+    let temp_path = bin_dir.join("oc-cluster-temp");
+
+    download_oc_from_cluster(&download_url, &temp_path)?;
+
+    // Get the version from the downloaded binary
+    let version = get_binary_version(&temp_path)?;
+
+    if verbose {
+        eprintln!("Detected version: {version}");
+    }
+
+    // Move to final location with version in name
+    let final_path = bin_dir.join(format!("oc-{version}"));
+    fs::rename(&temp_path, &final_path)?;
+
+    // Set as default
+    set_default_oc_with_platform(&version, &platform)?;
+
+    if verbose {
+        eprintln!("Installed and set as default: {version}");
+        check_path_warnings(verbose);
+    }
+
+    Ok(())
 }
 
-/// Get the server version from the currently connected OpenShift cluster
+/// Get the download URL for oc binary from the connected cluster
 ///
-/// Runs `oc version -o json` and extracts the server's openshiftVersion.
-fn get_server_version(verbose: bool) -> Result<String, Box<dyn Error>> {
+/// Uses `oc whoami --show-console` to get the console URL, then transforms it
+/// to the downloads endpoint URL.
+fn get_cluster_download_url(verbose: bool) -> Result<String, Box<dyn Error>> {
     let output = Command::new("oc")
-        .args(["version", "-o", "json"])
+        .args(["whoami", "--show-console"])
         .output()
         .map_err(|e| format!("Failed to run 'oc': {e}"))?;
 
@@ -368,26 +404,69 @@ fn get_server_version(verbose: bool) -> Result<String, Box<dyn Error>> {
         return Err(format!("Not connected to a cluster. Run 'oc login' first.\n{stderr}").into());
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let console_url = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if verbose {
-        eprintln!("oc version output:\n{stdout}");
+        eprintln!("Console URL: {console_url}");
     }
 
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse oc version JSON: {e}"))?;
+    // Transform console URL to downloads URL
+    // Example: https://console-openshift-console.apps-crc.testing
+    //       -> https://downloads-openshift-console.apps-crc.testing/amd64/linux/oc.tar
+    let download_url =
+        console_url.replace("console-openshift-console", "downloads-openshift-console");
+    let download_url = format!("{download_url}/amd64/linux/oc.tar");
 
-    // Try serverVersion.openshiftVersion first (OpenShift cluster)
-    if let Some(version) = json
-        .get("serverVersion")
-        .and_then(|sv| sv.get("openshiftVersion"))
-        .and_then(|v| v.as_str())
-        .filter(|v| !v.is_empty())
-    {
-        return Ok(version.to_string());
+    Ok(download_url)
+}
+
+/// Download the oc binary from the cluster's downloads endpoint
+fn download_oc_from_cluster(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
+    let resp = reqwest::blocking::get(url)?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Failed to download from cluster: {} ({})",
+            url,
+            resp.status()
+        )
+        .into());
     }
 
-    Err("No server version found. Are you connected to an OpenShift cluster?".into())
+    let mut archive = Archive::new(resp);
+
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?;
+        if path.ends_with("oc") {
+            let mut out = fs::File::create(dest)?;
+            io::copy(&mut entry, &mut out)?;
+            set_executable(&dest.to_path_buf())?;
+            return Ok(());
+        }
+    }
+
+    Err("oc binary not found in archive".into())
+}
+
+/// Get the version string from an oc binary
+fn get_binary_version(path: &Path) -> Result<String, Box<dyn Error>> {
+    let output = Command::new(path)
+        .arg("version")
+        .arg("--client")
+        .output()
+        .map_err(|e| format!("Failed to run downloaded oc binary: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse version from output like "Client Version: 4.16.55"
+    for line in stdout.lines() {
+        if let Some(version) = line.strip_prefix("Client Version: ") {
+            return Ok(version.trim().to_string());
+        }
+    }
+
+    Err("Could not determine version from downloaded binary".into())
 }
 
 /// Check for common PATH and installation issues
