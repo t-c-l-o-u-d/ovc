@@ -16,10 +16,14 @@ jobs:
       - name: Setup Rust Toolchain
         run: rustup default stable
 
-      - name: Cache Cargo Bin
-        uses: actions/cache@v4
+      - name: Restore Cargo Bin Cache
+        id: cache
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.cargo/bin
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
           key: ubuntu-cargo-bin-audit-v1
 
       - name: Install cargo-audit
@@ -27,6 +31,23 @@ jobs:
 
       - name: Run cargo audit
         run: cargo audit
+
+      - name: Save Cargo Bin Cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ubuntu-cargo-bin-audit-v1
+
+      - name: Delete Old Caches
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --json id,key --jq '.[] | select(.key | startswith("ubuntu-cargo-bin-audit-")) | select(.key != "ubuntu-cargo-bin-audit-v1") | .id' | xargs -I {} gh cache delete {} || true
 
   deny:
     name: Cargo Deny
@@ -37,10 +58,14 @@ jobs:
       - name: Setup Rust Toolchain
         run: rustup default stable
 
-      - name: Cache Cargo Bin
-        uses: actions/cache@v4
+      - name: Restore Cargo Bin Cache
+        id: cache
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.cargo/bin
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
           key: ubuntu-cargo-bin-deny-v1
 
       - name: Install cargo-deny
@@ -48,3 +73,20 @@ jobs:
 
       - name: Run cargo deny
         run: cargo deny check advisories bans sources
+
+      - name: Save Cargo Bin Cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ubuntu-cargo-bin-deny-v1
+
+      - name: Delete Old Caches
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --json id,key --jq '.[] | select(.key | startswith("ubuntu-cargo-bin-deny-")) | select(.key != "ubuntu-cargo-bin-deny-v1") | .id' | xargs -I {} gh cache delete {} || true
