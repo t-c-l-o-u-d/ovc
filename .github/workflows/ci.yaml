@@ -1,32 +1,32 @@
 # GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
-# Release workflow
+# Unified CI workflow
 
-name: Release
+name: CI
 
-run-name: Release v${{ inputs.version }}
+run-name: ${{ inputs.version && format('Release v{0}', inputs.version) || 'CI' }}
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.2.0)'
-        required: true
+        description: 'Version to release (e.g., 1.2.0). Leave empty for CI only.'
+        required: false
         type: string
 
 permissions:
   contents: write
 
 jobs:
-  validate:
-    name: Validate Version
+  ci:
+    name: ${{ inputs.version && format('Release v{0}', inputs.version) || 'Lint, Security, Test, Build' }}
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.validate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate and Update Version
-        id: validate
+        if: inputs.version != ''
         run: |
           VERSION="${{ inputs.version }}"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -38,59 +38,34 @@ jobs:
             echo "Updating Cargo.toml version from $CARGO_VERSION to $VERSION"
             sed -i "s/^version = \"$CARGO_VERSION\"/version = \"$VERSION\"/" Cargo.toml
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Commit Version Update
+        if: inputs.version != ''
         run: |
-          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           git diff --quiet Cargo.toml || {
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add Cargo.toml
+            CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
             git commit -m "Bump version to $CARGO_VERSION"
             git push
           }
 
-  lint:
-    name: Lint
-    needs: [validate]
-    uses: ./.github/workflows/lint.yaml
+      - name: Run CI
+        run: bash .github/ci.sh linux-x86_64
 
-  security:
-    name: Security Audit
-    needs: [validate]
-    uses: ./.github/workflows/security.yaml
-
-  test:
-    name: Test
-    needs: [validate]
-    uses: ./.github/workflows/test.yaml
-
-  build:
-    name: Build Binary
-    needs: [lint, security, test]
-    uses: ./.github/workflows/build.yaml
-    with:
-      arch: "linux-x86_64"
-      runner: "ubuntu-latest"
-
-  publish:
-    name: Create Release
-    needs: [validate, build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
         with:
-          pattern: ovc-*
+          name: ovc-linux-x86_64
+          path: ovc-linux-x86_64
 
       - name: Create Release
+        if: inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ needs.validate.outputs.version }}" \
-            --title "v${{ needs.validate.outputs.version }}" \
+          gh release create "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }}" \
             --generate-notes \
-            ovc-linux-x86_64/ovc-linux-x86_64
+            ovc-linux-x86_64
