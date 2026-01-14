@@ -5,7 +5,7 @@ A command-line tool for managing OpenShift 4 client versions.
 ## Features
 
 - **Download and manage multiple oc versions** - Download any available OpenShift 4 client version from mirror.openshift.com
-- **Cross-platform support** - Works on Linux (x86_64) and macOS (x86_64, ARM64) with automatic platform detection
+- **Linux support** - Works on Linux (x86_64)
 - **Version pattern matching** - List available versions matching major.minor patterns
 
 ## Installation
@@ -15,10 +15,6 @@ A command-line tool for managing OpenShift 4 client versions.
     ```bash
     chmod +x ~/Downloads/ovc-*
     mv ~/Downloads/ovc-* ~/.local/bin/ovc
-    ```
-    macOS users need to add an exception to bypass Gatekeeper
-    ```bash
-    xattr -d com.apple.quarantine ~/.local/bin/ovc
     ```
 
 ## Examples
