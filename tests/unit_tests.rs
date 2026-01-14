@@ -933,7 +933,7 @@ mod cli_match_server_tests {
         let output = run_ovc(&["--match-server", "--list", "4.19"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Only one action can be specified"));
+        assert!(stderr.contains("cannot be used with"));
     }
 
     #[test]
@@ -941,7 +941,7 @@ mod cli_match_server_tests {
         let output = run_ovc(&["--match-server", "--prune", "4.19"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Only one action can be specified"));
+        assert!(stderr.contains("cannot be used with"));
     }
 
     #[test]
@@ -949,7 +949,90 @@ mod cli_match_server_tests {
         let output = run_ovc(&["--match-server", "--installed", "4.19"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Only one action can be specified"));
+        assert!(stderr.contains("cannot be used with"));
+    }
+}
+
+#[cfg(test)]
+mod cli_update_tests {
+    use super::*;
+
+    #[test]
+    fn test_update_help_shows_flag() {
+        let output = run_ovc(&["--help"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("-u"), "Help should show -u flag");
+        assert!(
+            stdout.contains("--update"),
+            "Help should show --update flag"
+        );
+    }
+
+    #[test]
+    fn test_update_mutual_exclusivity_with_list() {
+        let output = run_ovc(&["--update", "--list", "4.19"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("cannot be used with"));
+    }
+
+    #[test]
+    fn test_update_mutual_exclusivity_with_prune() {
+        let output = run_ovc(&["--update", "--prune", "4.19"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("cannot be used with"));
+    }
+
+    #[test]
+    fn test_update_mutual_exclusivity_with_installed() {
+        let output = run_ovc(&["--update", "--installed", "4.19"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("cannot be used with"));
+    }
+
+    #[test]
+    fn test_update_mutual_exclusivity_with_match_server() {
+        let output = run_ovc(&["--update", "--match-server"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("cannot be used with"));
+    }
+
+    #[test]
+    fn test_update_checks_github() {
+        // This test verifies the update command runs and connects to GitHub
+        // It should either succeed (up to date) or fail with a sensible error
+        let output = run_ovc(&["--update"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // Should either be up to date, update successfully, or fail with a network/permission error
+        assert!(
+            stdout.contains("up to date")
+                || stdout.contains("Updated ovc")
+                || stderr.contains("Failed to fetch")
+                || stderr.contains("Failed to backup")
+                || stderr.contains("Failed to install"),
+            "Update should produce expected output. stdout: {stdout}, stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_update_verbose_shows_details() {
+        let output = run_ovc(&["-v", "--update"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // Verbose mode should show current version or fail with network error
+        assert!(
+            stderr.contains("Current version:")
+                || stderr.contains("Checking for updates")
+                || stderr.contains("Failed to fetch"),
+            "Verbose update should show progress. stdout: {stdout}, stderr: {stderr}"
+        );
     }
 }
 
