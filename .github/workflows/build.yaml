@@ -21,11 +21,19 @@ jobs:
         - name: Set Rust Toolchain to Stable
           run: rustup default stable
 
-        - name: Test Release Binary
-          run: cargo test --release
+        - name: Cache Cargo Registry and Build
+          uses: actions/cache@v4
+          with:
+            path: |
+              ~/.cargo/registry
+              ~/.cargo/git
+              target
+            key: ${{ inputs.runner }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+            restore-keys: |
+              ${{ inputs.runner }}-cargo-release-
 
-        - name: Build Release Binary
-          run: cargo build --release
+        - name: Build and Test Release Binary
+          run: cargo test --release
         
         - name: Strip Binary
           run: strip target/release/ovc

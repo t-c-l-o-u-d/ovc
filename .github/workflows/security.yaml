@@ -12,13 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Rust Toolchain
         run: rustup default stable
-      
-      - name: Install cargo-{audit,deny}
-        run: cargo install cargo-audit cargo-deny
-      
+
+      - name: Cache Cargo Bin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ubuntu-cargo-bin-audit-deny-v1
+
+      - name: Install cargo-audit and cargo-deny
+        run: |
+          command -v cargo-audit || cargo install cargo-audit
+          command -v cargo-deny || cargo install cargo-deny
+
       - name: Run cargo audit and cargo deny
         run: |
           cargo audit
