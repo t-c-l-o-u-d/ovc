@@ -4,8 +4,6 @@ name: Release
 run-name: >-
   ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:
