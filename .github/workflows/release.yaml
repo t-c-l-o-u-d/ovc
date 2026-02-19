@@ -19,7 +19,7 @@ jobs:
       ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Validate and Update Version
         if: inputs.version != ''
         run: |
@@ -60,7 +60,7 @@ jobs:
       - name: Build Release Binary
         run: bash .github/build.sh linux-x86_64
       - name: Upload Binary Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ovc-linux-x86_64
           path: ovc-linux-x86_64
