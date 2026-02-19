@@ -719,7 +719,10 @@ mod cache_unit_tests {
             .unwrap()
             .as_secs();
         let result = format_cache_age(now - 7200);
-        assert!(result.ends_with("h ago"), "Expected 'Nh ago', got: {result}");
+        assert!(
+            result.ends_with("h ago"),
+            "Expected 'Nh ago', got: {result}"
+        );
     }
 
     #[test]
@@ -732,6 +735,114 @@ mod cache_unit_tests {
         assert!(
             result.ends_with("m ago"),
             "Expected 'Nm ago', got: {result}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod cache_integration_tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_roundtrip_via_list() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join("cache");
+
+        // First run populates the cache from network
+        let output = Command::new("cargo")
+            .args(["run", "--", "--list", "4.19"])
+            .env("XDG_CACHE_HOME", &cache_dir)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success(), "First list failed");
+        assert!(
+            cache_dir.join("ovc/versions.json").exists(),
+            "Cache file should be created after first list"
+        );
+
+        // Second run should use cached data
+        let output = Command::new("cargo")
+            .args(["run", "--", "-v", "--list", "4.19"])
+            .env("XDG_CACHE_HOME", &cache_dir)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success(), "Second list failed");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Using cached versions"),
+            "Expected cache hit, got stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_cache_legacy_migration() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join("cache");
+        let ovc_cache_dir = cache_dir.join("ovc");
+        fs::create_dir_all(&ovc_cache_dir).unwrap();
+        let cache_file = ovc_cache_dir.join("versions.json");
+
+        // Write old-format cache
+        fs::write(
+            &cache_file,
+            r#"{"versions":["4.19.0","4.19.0-rc.1"],"timestamp":"2024-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--list", "4.19"])
+            .env("XDG_CACHE_HOME", &cache_dir)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(
+            output.status.success(),
+            "List with legacy cache failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Cache file should now be in new format with "urls" key
+        let content = fs::read_to_string(&cache_file).unwrap();
+        assert!(
+            content.contains("urls"),
+            "Cache should have been migrated to new format"
+        );
+    }
+
+    #[test]
+    fn test_cache_corrupted_recovery() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join("cache");
+        let ovc_cache_dir = cache_dir.join("ovc");
+        fs::create_dir_all(&ovc_cache_dir).unwrap();
+        let cache_file = ovc_cache_dir.join("versions.json");
+
+        // Write corrupted cache
+        fs::write(&cache_file, "{{{invalid json garbage").unwrap();
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--list", "4.19"])
+            .env("XDG_CACHE_HOME", &cache_dir)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(
+            output.status.success(),
+            "List with corrupted cache failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Cache file should now have valid JSON
+        let content = fs::read_to_string(&cache_file).unwrap();
+        assert!(
+            content.contains("versions"),
+            "Cache should be valid after recovery"
         );
     }
 }
