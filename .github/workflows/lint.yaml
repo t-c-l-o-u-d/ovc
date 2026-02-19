@@ -19,6 +19,7 @@ jobs:
     container:
       image: >-
         ghcr.io/t-c-l-o-u-d/linter-images/lint-${{ matrix.linter }}:latest
+      options: --user 0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: /usr/local/bin/lint
