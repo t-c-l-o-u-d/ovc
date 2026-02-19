@@ -482,7 +482,7 @@ fn get_latest_github_release(verbose: bool) -> Result<(String, String), Box<dyn 
         .into());
     }
 
-    let release: serde_json::Value = resp.json()?;
+    let release: serde_json::Value = serde_json::from_str(&resp.text()?)?;
 
     // Get the tag name (version)
     let tag_name = release["tag_name"]
