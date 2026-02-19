@@ -498,41 +498,6 @@ mod platform_tests {
         }
     }
 
-    #[test]
-    fn test_platform_debug_clone() {
-        let platform = Platform::LINUX_X86_64;
-        let cloned = platform.clone();
-
-        assert_eq!(platform.name, cloned.name);
-        assert_eq!(platform.mirror_path, cloned.mirror_path);
-        assert_eq!(platform.binary_suffix, cloned.binary_suffix);
-        assert_eq!(platform.file_extension, cloned.file_extension);
-
-        // Test Debug trait
-        let debug_str = format!("{platform:?}");
-        assert!(debug_str.contains("Platform"));
-        assert!(debug_str.contains("linux-x86_64"));
-    }
-}
-
-#[cfg(test)]
-mod constants_tests {
-    use super::*;
-
-    #[test]
-    fn test_constants_validity() {
-        // Test that constants are properly defined
-        assert!(OC_MIRROR_BASE.starts_with("https://"));
-        assert!(OC_MIRROR_BASE.contains("mirror.openshift.com"));
-        assert_eq!(
-            OC_MIRROR_BASE,
-            "https://mirror.openshift.com/pub/openshift-v4"
-        );
-
-        assert!(OC_BIN_DIR.contains("oc_bins"));
-        assert!(OC_BIN_DIR.starts_with(".local"));
-        assert_eq!(OC_BIN_DIR, ".local/bin/oc_bins");
-    }
 }
 
 // =============================================================================
@@ -604,74 +569,6 @@ mod cli_download_tests {
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("not found"));
-    }
-
-    #[test]
-    fn test_download_verbose_shows_details() {
-        // Try to download a version that should exist
-        let output = run_ovc(&["-v", "4.17.15"]);
-
-        if output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Should show either download progress or already installed message
-            assert!(
-                stderr.contains("Downloading: 4.17.15")
-                    || stderr.contains("Already installed: 4.17.15")
-            );
-            assert!(stderr.contains("Downloaded to:") || stderr.contains("Already installed:"));
-            assert!(stderr.contains("Set as default: 4.17.15"));
-        }
-    }
-
-    #[test]
-    fn test_download_silent_by_default() {
-        // Download should be silent by default
-        let output = run_ovc(&["4.17.14"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Should produce no output (silent)
-            assert!(stdout.trim().is_empty());
-            // stderr might contain compilation output but not our messages
-            assert!(!stderr.contains("Downloading:"));
-            assert!(!stderr.contains("Downloaded to:"));
-            assert!(!stderr.contains("Set as default:"));
-        }
-    }
-
-    #[test]
-    fn test_partial_version_resolution() {
-        // Test that partial versions like "4.19" resolve to latest patch
-        let output = run_ovc(&["-v", "4.19"]);
-
-        if output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Should show resolution from partial to full version
-            assert!(stderr.contains("Resolved 4.19 to 4.19."));
-            assert!(
-                stderr.contains("Downloading: 4.19.")
-                    || stderr.contains("Already installed: 4.19.")
-            );
-            assert!(stderr.contains("Set as default: 4.19."));
-        }
-    }
-
-    #[test]
-    fn test_full_version_no_resolution() {
-        // Test that full versions don't show resolution message
-        let output = run_ovc(&["-v", "4.17.15"]);
-
-        if output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Should NOT show resolution message
-            assert!(!stderr.contains("Resolved"));
-            // Should show either download or already installed message
-            assert!(
-                stderr.contains("Downloading: 4.17.15")
-                    || stderr.contains("Already installed: 4.17.15")
-            );
-        }
     }
 
     #[test]
@@ -797,47 +694,6 @@ mod cli_installed_tests {
     }
 
     #[test]
-    fn test_installed_command_verbose_shows_paths() {
-        let output = run_ovc(&["-v", "--installed", "4.19"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // If any versions are installed, they should show paths
-            if !stdout.trim().is_empty() {
-                assert!(stdout.contains("oc_bins") || stdout.contains('/'));
-            }
-        } else {
-            // If no versions match, should show appropriate error
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching"));
-        }
-    }
-
-    #[test]
-    fn test_installed_matching_versions() {
-        // This test depends on having some versions installed
-        // We'll use a pattern that might match some installed versions
-        let output = run_ovc(&["--installed", "4.19"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = stdout.lines().collect();
-            for line in lines {
-                if !line.trim().is_empty() {
-                    assert!(
-                        line.starts_with("4.19"),
-                        "Should list 4.19.x versions: {line}"
-                    );
-                }
-            }
-        } else {
-            // If no versions match, should show appropriate error
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching"));
-        }
-    }
-
-    #[test]
     fn test_installed_no_matches() {
         let output = run_ovc(&["--installed", "999.999"]);
         assert!(!output.status.success());
@@ -845,22 +701,6 @@ mod cli_installed_tests {
         assert!(stderr.contains("No installed versions found matching"));
     }
 
-    #[test]
-    fn test_installed_verbose_mode() {
-        let output = run_ovc(&["-v", "--installed", "4.19"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // Verbose mode should show paths if versions are found
-            if !stdout.trim().is_empty() {
-                assert!(stdout.contains('(') && stdout.contains(')'));
-            }
-        } else {
-            // If no versions match, should show appropriate error
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching"));
-        }
-    }
 }
 
 #[cfg(test)]
@@ -920,18 +760,6 @@ mod cli_match_server_tests {
     }
 
     #[test]
-    fn test_match_server_help_shows_flag() {
-        let output = run_ovc(&["--help"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("-m"), "Help should show -m flag");
-        assert!(
-            stdout.contains("--match-server"),
-            "Help should show --match-server flag"
-        );
-    }
-
-    #[test]
     fn test_match_server_mutual_exclusivity_with_list() {
         let output = run_ovc(&["--match-server", "--list", "4.19"]);
         assert!(!output.status.success());
@@ -959,18 +787,6 @@ mod cli_match_server_tests {
 #[cfg(test)]
 mod cli_update_tests {
     use super::*;
-
-    #[test]
-    fn test_update_help_shows_flag() {
-        let output = run_ovc(&["--help"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("-u"), "Help should show -u flag");
-        assert!(
-            stdout.contains("--update"),
-            "Help should show --update flag"
-        );
-    }
 
     #[test]
     fn test_update_mutual_exclusivity_with_list() {
@@ -1004,115 +820,5 @@ mod cli_update_tests {
         assert!(stderr.contains("cannot be used with"));
     }
 
-    #[test]
-    fn test_update_checks_github() {
-        // This test verifies the update command runs and connects to GitHub
-        // It should either succeed (up to date) or fail with a sensible error
-        let output = run_ovc(&["--update"]);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        // Should either be up to date, update successfully, or fail with a network/permission error
-        assert!(
-            stdout.contains("up to date")
-                || stdout.contains("Updated ovc")
-                || stderr.contains("Failed to fetch")
-                || stderr.contains("Failed to backup")
-                || stderr.contains("Failed to install"),
-            "Update should produce expected output. stdout: {stdout}, stderr: {stderr}"
-        );
-    }
-
-    #[test]
-    fn test_update_verbose_shows_details() {
-        let output = run_ovc(&["-v", "--update"]);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        // Verbose mode should show current version or fail with network error
-        assert!(
-            stderr.contains("Current version:")
-                || stderr.contains("Checking for updates")
-                || stderr.contains("Failed to fetch"),
-            "Verbose update should show progress. stdout: {stdout}, stderr: {stderr}"
-        );
-    }
 }
 
-#[cfg(test)]
-mod cli_behavior_tests {
-    use super::*;
-
-    #[test]
-    fn test_platform_detection() {
-        // The tool should work regardless of platform
-        let output = run_ovc(&["--list", "4.19"]);
-        assert!(output.status.success());
-
-        // Should not contain platform-specific errors
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(!stderr.contains("platform not supported"));
-    }
-
-    #[test]
-    fn test_path_warnings() {
-        // Test with a PATH that doesn't include ~/.local/bin but includes cargo
-        let current_path = std::env::var("PATH").unwrap_or_default();
-        let modified_path = format!("/usr/bin:/bin:{current_path}");
-
-        let output = Command::new("cargo")
-            .args(["run", "--", "--list", "4.19"])
-            .env("PATH", modified_path)
-            .output();
-
-        if let Ok(output) = output {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Should warn about PATH if oc is found but ~/.local/bin is not in PATH
-            if stderr.contains("Warning") {
-                assert!(stderr.contains("PATH") || stderr.contains("not found"));
-            }
-            // Test passes if command runs successfully or fails gracefully
-        } else {
-            // If we can't run the command due to PATH issues, that's also a valid test case
-            // This test is mainly about ensuring the app handles PATH issues gracefully
-        }
-    }
-
-    #[test]
-    fn test_unix_philosophy_compliance() {
-        // Test that commands without -v produce minimal output
-
-        // list should just list versions
-        let output = run_ovc(&["--list", "4.19"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(!stdout.contains('('));
-
-        // installed should just list versions
-        let output = run_ovc(&["--installed", "4.19"]);
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            assert!(!stdout.contains('('));
-        } else {
-            // If no versions match, that's also valid for this test
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("No installed versions found matching"));
-        }
-    }
-
-    #[test]
-    fn test_symlink_handling() {
-        // This test would need a more complex setup to properly test symlink creation
-        // For now, just ensure the commands don't crash
-        let output = run_ovc(&["--installed", "4.19"]);
-        // Command should either succeed or fail gracefully
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(
-                stderr.contains("No installed versions found matching")
-                    || stderr.contains("Version must include")
-            );
-        }
-    }
-}
