@@ -43,6 +43,8 @@ the repo root.
 - When renaming or moving files/directories, include
   both the old and new paths in the **same commit**
   so git detects the rename.
+- Never drop or clear git stashes without explicit
+  user approval. Always ask first.
 
 ## Documentation
 
