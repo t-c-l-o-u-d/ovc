@@ -510,6 +510,82 @@ mod platform_tests {
     }
 }
 
+#[cfg(test)]
+mod version_pattern_tests {
+    use super::*;
+
+    #[test]
+    fn test_exact_match() {
+        assert!(matches_version_pattern("4.19.0", "4.19.0"));
+        assert!(matches_version_pattern("4.1.0-rc.1", "4.1.0-rc.1"));
+    }
+
+    #[test]
+    fn test_prefix_with_dot() {
+        assert!(matches_version_pattern("4.19.0", "4.19"));
+        assert!(matches_version_pattern("4.19.1", "4.19"));
+        assert!(matches_version_pattern("4.19.10", "4.19"));
+    }
+
+    #[test]
+    fn test_prefix_with_dash() {
+        assert!(matches_version_pattern("4.19.0-rc.1", "4.19.0"));
+        assert!(matches_version_pattern("4.19.0-alpha.1", "4.19.0"));
+    }
+
+    #[test]
+    fn test_no_false_prefix_major_minor() {
+        assert!(!matches_version_pattern("4.13.58", "4.1"));
+        assert!(!matches_version_pattern("4.13.0", "4.1"));
+    }
+
+    #[test]
+    fn test_no_false_prefix_minor_boundary() {
+        assert!(!matches_version_pattern("4.10.0", "4.1"));
+        assert!(!matches_version_pattern("4.190.0", "4.19"));
+    }
+
+    #[test]
+    fn test_partial_minor_boundaries() {
+        assert!(matches_version_pattern("4.1.0", "4.1"));
+        assert!(!matches_version_pattern("4.10.0", "4.1"));
+        assert!(!matches_version_pattern("4.12.0", "4.1"));
+    }
+
+    #[test]
+    fn test_empty_pattern() {
+        // Empty pattern: "".is_empty() means starts_with(".") and starts_with("-") are false
+        assert!(!matches_version_pattern("4.19.0", ""));
+    }
+
+    #[test]
+    fn test_empty_version() {
+        assert!(!matches_version_pattern("", "4.19"));
+    }
+
+    #[test]
+    fn test_both_empty() {
+        assert!(matches_version_pattern("", ""));
+    }
+
+    #[test]
+    fn test_pattern_longer_than_version() {
+        assert!(!matches_version_pattern("4.19", "4.19.0"));
+    }
+
+    #[test]
+    fn test_four_part_version() {
+        assert!(matches_version_pattern("4.19.0.1", "4.19.0"));
+        assert!(matches_version_pattern("4.19.0.1", "4.19"));
+    }
+
+    #[test]
+    fn test_nested_dash_prefix() {
+        assert!(matches_version_pattern("4.19.0-rc.1.2", "4.19.0-rc.1"));
+        assert!(matches_version_pattern("4.19.0-rc.1.2", "4.19.0"));
+    }
+}
+
 // =============================================================================
 // INTEGRATION TESTS - CLI Application
 // =============================================================================
