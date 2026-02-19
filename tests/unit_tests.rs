@@ -1252,8 +1252,14 @@ mod cli_prune_isolated_tests {
         );
 
         let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
-        assert!(!bin_dir.join("oc-4.19.0").exists(), "4.19.0 should be removed");
-        assert!(!bin_dir.join("oc-4.19.1").exists(), "4.19.1 should be removed");
+        assert!(
+            !bin_dir.join("oc-4.19.0").exists(),
+            "4.19.0 should be removed"
+        );
+        assert!(
+            !bin_dir.join("oc-4.19.1").exists(),
+            "4.19.1 should be removed"
+        );
         assert!(bin_dir.join("oc-4.20.0").exists(), "4.20.0 should remain");
     }
 
@@ -1377,8 +1383,14 @@ mod cli_installed_isolated_tests {
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.contains("4.1.0"));
-        assert!(!stdout.contains("4.13.0"), "4.13 should not match 4.1 pattern");
-        assert!(!stdout.contains("4.10.0"), "4.10 should not match 4.1 pattern");
+        assert!(
+            !stdout.contains("4.13.0"),
+            "4.13 should not match 4.1 pattern"
+        );
+        assert!(
+            !stdout.contains("4.10.0"),
+            "4.10 should not match 4.1 pattern"
+        );
     }
 
     #[test]
