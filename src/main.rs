@@ -31,7 +31,10 @@ use ovc::cache::{
     get_available_versions, get_available_versions_with_verbose, load_cached_versions,
     update_cache_for_missing_version, version_exists_in_cache,
 };
-use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version};
+use ovc::{
+    OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version,
+    matches_version_pattern,
+};
 
 /// Standalone actions that don't require a version argument
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -153,33 +156,6 @@ fn main() {
 // =============================================================================
 // Command Implementation Functions
 // =============================================================================
-
-/// Check if a version matches the given version pattern
-///
-/// Performs proper version prefix matching by ensuring the pattern is followed
-/// by a dot, dash, or is an exact match. This prevents "4.1" from matching "4.13"
-/// while allowing "4.19.0" to match both "4.19.0.1" and "4.19.0-rc.1".
-///
-/// # Arguments
-/// * `version` - Full version string to check (e.g. "4.13.58")
-/// * `pattern` - Version pattern to match against (e.g. "4.1")
-///
-/// # Returns
-/// `true` if the version matches the pattern properly
-///
-/// # Examples
-/// * matches_version_pattern("4.1.0", "4.1") -> true
-/// * matches_version_pattern("4.13.58", "4.1") -> false
-/// * matches_version_pattern("4.19.3", "4.19") -> true
-/// * matches_version_pattern("4.19.0-rc.1", "4.19.0") -> true
-fn matches_version_pattern(version: &str, pattern: &str) -> bool {
-    if version == pattern {
-        return true;
-    }
-
-    // Check if version starts with pattern followed by a dot or dash
-    version.starts_with(&format!("{pattern}.")) || version.starts_with(&format!("{pattern}-"))
-}
 
 /// Download and install a specific OpenShift client version
 ///
