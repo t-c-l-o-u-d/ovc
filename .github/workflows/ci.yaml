@@ -1,71 +1,78 @@
-# GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
-# Unified CI workflow
-
+# GNU Affero General Public License v3.0 or later
+# See LICENSE or https://www.gnu.org/licenses/agpl.txt
 name: CI
-
-run-name: ${{ inputs.version && format('Release v{0}', inputs.version) || 'CI' }}
-
+run-name: >-
+  ${{ inputs.version && format('v{0}', inputs.version) || 'CI' }}
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.2.0). Leave empty for CI only.'
+        description: >-
+          Version to release (e.g., 1.2.0). Leave empty for CI only.
         required: false
         type: string
-
 permissions:
   contents: write
-
 jobs:
   ci:
-    name: ${{ inputs.version && format('Release v{0}', inputs.version) || 'Lint, Security, Test, Build' }}
+    name: >-
+      ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Validate and Update Version
         if: inputs.version != ''
         run: |
           VERSION="${{ inputs.version }}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Invalid version format. Use semantic versioning (e.g., 1.2.0)"
+          RE='^[0-9]+\.[0-9]+\.[0-9]+$'
+          if [[ ! "$VERSION" =~ $RE ]]; then
+            echo "::error::Invalid semver (e.g. 1.2.0)"
             exit 1
           fi
-          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          CARGO_VERSION=$( \
+            grep '^version' Cargo.toml \
+            | head -1 \
+            | sed 's/.*"\(.*\)".*/\1/')
           if [[ "$VERSION" != "$CARGO_VERSION" ]]; then
-            echo "Updating Cargo.toml version from $CARGO_VERSION to $VERSION"
-            sed -i "s/^version = \"$CARGO_VERSION\"/version = \"$VERSION\"/" Cargo.toml
+            echo "Updating version" \
+              "$CARGO_VERSION -> $VERSION"
+            sed -i \
+              "s/^version = \"$CARGO_VERSION\"/version = \"$VERSION\"/" \
+              Cargo.toml
           fi
-
       - name: Commit Version Update
         if: inputs.version != ''
         run: |
           git diff --quiet Cargo.toml || {
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add Cargo.toml
-            CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-            git commit -m "Bump version to $CARGO_VERSION"
+            git config user.name \
+              "github-actions[bot]"
+            git config user.email \
+              "github-actions[bot]@users.noreply.github.com"
+            git add Cargo.toml Cargo.lock
+            CARGO_VERSION=$( \
+              grep '^version' Cargo.toml \
+              | head -1 \
+              | sed 's/.*"\(.*\)".*/\1/')
+            git commit -m \
+              "Bump version to $CARGO_VERSION [skip ci]"
             git push
           }
-
-      - name: Run CI
+      - name: Build Release Binary
         run: bash .github/ci.sh linux-x86_64
-
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ovc-linux-x86_64
           path: ovc-linux-x86_64
-
       - name: Create Release
         if: inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ inputs.version }}" \
+          gh release create \
+            "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --generate-notes \
             ovc-linux-x86_64

@@ -1,0 +1,24 @@
+# GNU Affero General Public License v3.0 or later
+# See LICENSE or https://www.gnu.org/licenses/agpl.txt
+name: Lint
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        linter:
+          - bash
+          - markdown
+          - rust
+          - yaml
+    container:
+      image: >-
+        ghcr.io/t-c-l-o-u-d/linter-images/lint-${{ matrix.linter }}:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: /usr/local/bin/lint
