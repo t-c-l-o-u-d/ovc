@@ -58,7 +58,7 @@ jobs:
             git push
           }
       - name: Build Release Binary
-        run: bash .github/build.sh linux-x86_64
+        run: bash .github/build.bash linux-x86_64
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v6
         with:
