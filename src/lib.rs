@@ -16,5 +16,5 @@ pub mod version;
 pub use platform::{OC_BIN_DIR, OC_MIRROR_BASE, Platform};
 pub use version::{
     compare_versions, extract_major_minor, extract_version_from_path, extract_version_number,
-    find_matching_version, is_stable_version,
+    find_matching_version, is_stable_version, matches_version_pattern,
 };
