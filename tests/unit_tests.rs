@@ -586,6 +586,156 @@ mod version_pattern_tests {
     }
 }
 
+#[cfg(test)]
+mod cache_unit_tests {
+    use ovc::cache::{VersionCache, VersionInfo, build_version_info, format_cache_age};
+    use std::collections::HashMap;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_version_info(version: &str, platform: &str, url: &str) -> VersionInfo {
+        let mut urls = HashMap::new();
+        urls.insert(platform.to_string(), url.to_string());
+        VersionInfo {
+            version: version.to_string(),
+            urls,
+        }
+    }
+
+    #[test]
+    fn test_cache_new_timestamp() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let cache = VersionCache::new(vec![]);
+        assert!(cache.timestamp() >= now && cache.timestamp() <= now + 2);
+    }
+
+    #[test]
+    fn test_cache_new_with_versions() {
+        let v1 = make_version_info("4.19.0", "linux-x86_64", "https://example.com/4.19.0");
+        let v2 = make_version_info("4.20.0", "linux-x86_64", "https://example.com/4.20.0");
+        let cache = VersionCache::new(vec![v1, v2]);
+        assert_eq!(cache.get_version_strings().len(), 2);
+    }
+
+    #[test]
+    fn test_get_version_strings_order() {
+        let v1 = make_version_info("4.19.0", "linux-x86_64", "https://a");
+        let v2 = make_version_info("4.20.0", "linux-x86_64", "https://b");
+        let v3 = make_version_info("4.18.0", "linux-x86_64", "https://c");
+        let cache = VersionCache::new(vec![v1, v2, v3]);
+        let strings = cache.get_version_strings();
+        assert_eq!(strings, vec!["4.19.0", "4.20.0", "4.18.0"]);
+    }
+
+    #[test]
+    fn test_get_version_strings_empty() {
+        let cache = VersionCache::new(vec![]);
+        assert!(cache.get_version_strings().is_empty());
+    }
+
+    #[test]
+    fn test_get_download_url_found() {
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
+        let cache = VersionCache::new(vec![v]);
+        assert_eq!(
+            cache.get_download_url("4.19.0", "linux-x86_64"),
+            Some("https://mirror/4.19.0.tar.gz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_get_download_url_wrong_version() {
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
+        let cache = VersionCache::new(vec![v]);
+        assert_eq!(cache.get_download_url("4.20.0", "linux-x86_64"), None);
+    }
+
+    #[test]
+    fn test_get_download_url_wrong_platform() {
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
+        let cache = VersionCache::new(vec![v]);
+        assert_eq!(cache.get_download_url("4.19.0", "darwin-arm64"), None);
+    }
+
+    #[test]
+    fn test_get_download_url_empty_cache() {
+        let cache = VersionCache::new(vec![]);
+        assert_eq!(cache.get_download_url("4.19.0", "linux-x86_64"), None);
+    }
+
+    #[test]
+    fn test_has_version_true() {
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
+        let cache = VersionCache::new(vec![v]);
+        assert!(cache.has_version("4.19.0"));
+    }
+
+    #[test]
+    fn test_has_version_false() {
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
+        let cache = VersionCache::new(vec![v]);
+        assert!(!cache.has_version("4.20.0"));
+    }
+
+    #[test]
+    fn test_build_version_info_single() {
+        let versions = vec!["4.19.0".to_string()];
+        let infos = build_version_info(&versions);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].version, "4.19.0");
+        let url = infos[0].urls.get("linux-x86_64").unwrap();
+        assert!(url.contains("mirror.openshift.com"));
+        assert!(url.contains("4.19.0"));
+    }
+
+    #[test]
+    fn test_build_version_info_empty() {
+        let versions: Vec<String> = vec![];
+        let infos = build_version_info(&versions);
+        assert!(infos.is_empty());
+    }
+
+    #[test]
+    fn test_build_version_info_multiple() {
+        let versions = vec![
+            "4.18.0".to_string(),
+            "4.19.0".to_string(),
+            "4.20.0".to_string(),
+        ];
+        let infos = build_version_info(&versions);
+        assert_eq!(infos.len(), 3);
+        for (i, info) in infos.iter().enumerate() {
+            assert_eq!(info.version, versions[i]);
+            assert!(info.urls.contains_key("linux-x86_64"));
+        }
+    }
+
+    #[test]
+    fn test_format_cache_age_hours() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let result = format_cache_age(now - 7200);
+        assert!(result.ends_with("h ago"), "Expected 'Nh ago', got: {result}");
+    }
+
+    #[test]
+    fn test_format_cache_age_minutes() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let result = format_cache_age(now - 300);
+        assert!(
+            result.ends_with("m ago"),
+            "Expected 'Nm ago', got: {result}"
+        );
+    }
+}
+
 // =============================================================================
 // INTEGRATION TESTS - CLI Application
 // =============================================================================
