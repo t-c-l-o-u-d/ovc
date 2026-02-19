@@ -1,8 +1,8 @@
 # GNU Affero General Public License v3.0 or later
 # See LICENSE or https://www.gnu.org/licenses/agpl.txt
-name: CI
+name: Release
 run-name: >-
-  ${{ inputs.version && format('v{0}', inputs.version) || 'CI' }}
+  ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
 on:
   push:
     branches: [main]
@@ -10,13 +10,13 @@ on:
     inputs:
       version:
         description: >-
-          Version to release (e.g., 1.2.0). Leave empty for CI only.
+          Version to release (e.g., 1.2.0). Leave empty for build only.
         required: false
         type: string
 permissions:
   contents: write
 jobs:
-  ci:
+  release:
     name: >-
       ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
     runs-on: ubuntu-latest
@@ -60,7 +60,7 @@ jobs:
             git push
           }
       - name: Build Release Binary
-        run: bash .github/ci.sh linux-x86_64
+        run: bash .github/build.sh linux-x86_64
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
         with:
