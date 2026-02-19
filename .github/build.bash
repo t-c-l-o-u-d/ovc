@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
 # Build release binary
 
