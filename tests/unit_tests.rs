@@ -52,6 +52,17 @@ fn run_ovc(args: &[&str]) -> std::process::Output {
         .expect("Failed to execute ovc command")
 }
 
+/// Build a PATH string with directories containing an `oc` binary removed.
+/// Preserves cargo, rustc, and all other tools while preventing
+/// "Remove the existing oc binary" errors in tests.
+fn path_without_oc() -> String {
+    let path = std::env::var("PATH").unwrap_or_default();
+    path.split(':')
+        .filter(|dir| !dir.is_empty() && !PathBuf::from(dir).join("oc").exists())
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 // =============================================================================
 // UNIT TESTS - Library Functions
 // =============================================================================
@@ -497,7 +508,6 @@ mod platform_tests {
             assert!(versions_url.ends_with("/clients/ocp/"));
         }
     }
-
 }
 
 // =============================================================================
@@ -573,13 +583,21 @@ mod cli_download_tests {
 
     #[test]
     fn test_network_error_handling() {
-        // Test with an invalid URL (this would require mocking, but we can test error handling)
-        let output = run_ovc(&["999.0.0"]);
-        assert!(!output.status.success());
+        let temp_dir = TestTempDir::new().unwrap();
+        let output = Command::new("cargo")
+            .args(["run", "--", "999.0.0"])
+            .env("HOME", temp_dir.path())
+            .env("XDG_CACHE_HOME", temp_dir.path().join("cache"))
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
 
+        assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(!stderr.trim().is_empty());
-        assert!(stderr.contains("not found") || stderr.contains("Version"));
+        assert!(
+            stderr.contains("not found"),
+            "Expected 'not found' error, got: {stderr}"
+        );
     }
 }
 
@@ -700,7 +718,6 @@ mod cli_installed_tests {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("No installed versions found matching"));
     }
-
 }
 
 #[cfg(test)]
@@ -733,7 +750,6 @@ mod cli_match_server_tests {
 
     #[test]
     fn test_match_server_no_connection() {
-        // When not connected to a cluster, should fail with appropriate error
         let temp_dir = TestTempDir::new().unwrap();
         let home_dir = temp_dir.path();
 
@@ -741,21 +757,15 @@ mod cli_match_server_tests {
             .args(["run", "--", "--match-server"])
             .env("HOME", home_dir)
             .env("KUBECONFIG", home_dir.join("nonexistent"))
+            .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
 
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let combined = format!("{stderr}{stdout}");
         assert!(
-            combined.contains("Not connected")
-                || combined.contains("No server version")
-                || combined.contains("Failed to run")
-                || combined.contains("error")
-                || combined.contains("cluster")
-                || combined.contains("Remove the existing oc binary"),
-            "Expected connection or conflict error, got: {combined}"
+            stderr.contains("Not connected") || stderr.contains("Failed to run"),
+            "Expected cluster connection error, got: {stderr}"
         );
     }
 
@@ -819,6 +829,4 @@ mod cli_update_tests {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("cannot be used with"));
     }
-
 }
-
