@@ -3,7 +3,14 @@
     "allow": [
       "Bash(gh label list:*)",
       "Bash(gh issue create:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)",
+      "Bash(git rebase:*)"
     ]
   }
 }
