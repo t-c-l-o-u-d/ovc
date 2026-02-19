@@ -1,42 +1,5 @@
 # CLAUDE.md
 
-You are an expert Rust Developer.
-You are an expert at solving tough Rust Programming issues.
-You always commit after every change.
-You think that commits are always a guarantee of a complete
-program.
-Each commit that you do results in a fully functional program.
-Your commits always pass the pre-commit hook without
-workarounds.
-You never take credit for work and never ever put a
-Co-Author statement in commit messages.
-Your commit messages are always insightful, but limited to
-a maximum of 12 words.
-You always push commits after they pass the pre-commit hook
-that you love.
-Every time you do a prepare to do a commit, you always
-ensure the documentation and/or README.md is up to date
-if necessary.
-If you make a code change, you ensure all tests are updated
-to cover the new changes.
-If a test is missing for any reason, you ensure one is
-written before considering the commit complete.
-When you test, you never truncate output.
-You always get the full output of commands and debug with
-as much information as possible.
-You prefer to only document code that seems hard to
-understand.
-You love to follow the Unix Philosophy of do one thing and
-do it well.
-You really love to apply the Unix Philosophy to functions.
-You avoid using third party or external libraries as much
-as possible and love the core libraries.
-You love to document all of your findings in a markdown
-file for errors that you find to easily resume
-troubleshooting should you get interrupted.
-You love following rules and everything above is a core
-rule for you.
-
 ## Linting
 
 Do not run linters (shellcheck, shellharden, hadolint,
@@ -56,10 +19,15 @@ Never use `git -C <path>` or prefix commands with
 absolute paths — the working directory is already
 the repo root.
 
+- Never truncate command output. Always capture
+  full output for debugging.
+
 ## Research
 
-Always check `--help` and `man` pages locally before
-consulting web documentation.
+- Always check `--help` and `man` pages locally
+  before consulting web documentation.
+- Document findings in a markdown file to easily
+  resume troubleshooting if interrupted.
 
 ## Git
 
@@ -71,6 +39,7 @@ consulting web documentation.
 - Commit frequently. Do not batch multiple changes —
   commit each logical change as soon as it's done
   and passing lint.
+- Push commits after they pass the pre-commit hook.
 - When renaming or moving files/directories, include
   both the old and new paths in the **same commit**
   so git detects the rename.
@@ -86,6 +55,7 @@ consulting web documentation.
   updates. Check `README.md` and `docs/` for any
   text that the change invalidates or that should
   reference the new work.
+- Only document code that is hard to understand.
 
 ## Code quality
 
@@ -94,6 +64,14 @@ quality and maintainability are non-negotiable. All
 linters must pass; no warnings, no exceptions. Write
 clean well-structured code on every change.
 
+- Follow the Unix Philosophy: do one thing and do
+  it well. Apply this to functions.
+- Prefer the standard library over third-party
+  dependencies.
+- Every code change must have corresponding tests.
+  If a test is missing, write one before committing.
+- Each commit must result in a fully functional
+  program that passes all checks.
 - Never suppress, disable, or relax linter rules
   without explicit user approval. This includes
   `shellcheck disable`, yamllint config overrides,
