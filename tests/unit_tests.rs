@@ -1167,3 +1167,248 @@ mod cli_update_tests {
         assert!(stderr.contains("cannot be used with"));
     }
 }
+
+// =============================================================================
+// COMPLETION TESTS
+// =============================================================================
+
+#[cfg(test)]
+mod cli_completion_tests {
+    use super::*;
+
+    #[test]
+    fn test_completion_bash() {
+        let output = run_ovc(&["--completion", "bash"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("_ovc_completions"));
+        assert!(stdout.contains("complete -o nosort"));
+    }
+
+    #[test]
+    fn test_completion_zsh_unsupported() {
+        let output = run_ovc(&["--completion", "zsh"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("unsupported shell: zsh"),
+            "Expected unsupported shell error, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_completion_fish_unsupported() {
+        let output = run_ovc(&["--completion", "fish"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("unsupported shell: fish"),
+            "Expected unsupported shell error, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_completion_bash_case_insensitive() {
+        let output = run_ovc(&["--completion", "BASH"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("_ovc_completions"));
+    }
+}
+
+// =============================================================================
+// ISOLATED PRUNE TESTS
+// =============================================================================
+
+#[cfg(test)]
+mod cli_prune_isolated_tests {
+    use super::*;
+
+    fn create_fake_binaries(home: &std::path::Path, versions: &[&str]) {
+        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        fs::create_dir_all(&bin_dir).unwrap();
+        for v in versions {
+            fs::write(bin_dir.join(format!("oc-{v}")), "fake").unwrap();
+        }
+    }
+
+    #[test]
+    fn test_prune_removes_matching_files() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.0", "4.19.1", "4.20.0"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--prune", "4.19"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(
+            output.status.success(),
+            "Prune failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        assert!(!bin_dir.join("oc-4.19.0").exists(), "4.19.0 should be removed");
+        assert!(!bin_dir.join("oc-4.19.1").exists(), "4.19.1 should be removed");
+        assert!(bin_dir.join("oc-4.20.0").exists(), "4.20.0 should remain");
+    }
+
+    #[test]
+    fn test_prune_verbose_shows_removal_count() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.0", "4.19.1"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "-v", "--prune", "4.19"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Removed 2 version(s)"),
+            "Expected removal count, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_prune_invalid_format() {
+        let output = run_ovc(&["--prune", "4"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Version must include at least major and minor version"));
+    }
+
+    #[test]
+    fn test_prune_empty_dir_no_matches() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let output = Command::new("cargo")
+            .args(["run", "--", "--prune", "4.19"])
+            .env("HOME", temp_dir.path())
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("No installed versions found matching"));
+    }
+}
+
+// =============================================================================
+// ISOLATED INSTALLED TESTS
+// =============================================================================
+
+#[cfg(test)]
+mod cli_installed_isolated_tests {
+    use super::*;
+
+    fn create_fake_binaries(home: &std::path::Path, versions: &[&str]) {
+        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        fs::create_dir_all(&bin_dir).unwrap();
+        for v in versions {
+            fs::write(bin_dir.join(format!("oc-{v}")), "fake").unwrap();
+        }
+    }
+
+    #[test]
+    fn test_installed_from_known_state() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.0", "4.19.1", "4.20.0"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--installed", "4.19"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(
+            output.status.success(),
+            "Installed failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("4.19.0"));
+        assert!(stdout.contains("4.19.1"));
+        assert!(!stdout.contains("4.20.0"));
+    }
+
+    #[test]
+    fn test_installed_verbose_shows_paths() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.0"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "-v", "--installed", "4.19"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains('(') && stdout.contains(')'));
+        assert!(stdout.contains("oc_bins"));
+    }
+
+    #[test]
+    fn test_installed_no_false_prefix_match() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.1.0", "4.13.0", "4.10.0"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--installed", "4.1"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("4.1.0"));
+        assert!(!stdout.contains("4.13.0"), "4.13 should not match 4.1 pattern");
+        assert!(!stdout.contains("4.10.0"), "4.10 should not match 4.1 pattern");
+    }
+
+    #[test]
+    fn test_installed_invalid_format() {
+        let output = run_ovc(&["--installed", "4"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Version must include at least major and minor version"));
+    }
+
+    #[test]
+    fn test_installed_sorted_output() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.3", "4.19.1", "4.19.10", "4.19.2"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--installed", "4.19"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let versions: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(
+            versions,
+            vec!["4.19.1", "4.19.2", "4.19.3", "4.19.10"],
+            "Versions should be sorted semantically"
+        );
+    }
+}
