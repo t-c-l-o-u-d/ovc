@@ -1424,3 +1424,173 @@ mod cli_installed_isolated_tests {
         );
     }
 }
+
+// =============================================================================
+// Man page tests
+// =============================================================================
+
+mod manpage_unit_tests {
+    use super::*;
+    use ovc::manpage;
+
+    #[test]
+    fn test_get_data_dir_with_xdg() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
+        let dir = manpage::get_data_dir().unwrap();
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+
+        assert_eq!(dir, data_home.join("ovc"));
+        assert!(dir.exists());
+    }
+
+    #[test]
+    fn test_get_data_dir_falls_back_to_home() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+        let saved_home = std::env::var("HOME").unwrap();
+        unsafe { std::env::set_var("HOME", home) };
+        let dir = manpage::get_data_dir().unwrap();
+        unsafe { std::env::set_var("HOME", saved_home) };
+
+        assert_eq!(dir, home.join(".local/share/ovc"));
+        assert!(dir.exists());
+    }
+
+    #[test]
+    fn test_get_man_install_dir_creates_path() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
+        let dir = manpage::get_man_install_dir().unwrap();
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+
+        assert_eq!(dir, data_home.join("man/man1"));
+        assert!(dir.exists());
+    }
+
+    #[test]
+    fn test_read_installed_version_missing() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
+        let version = manpage::read_installed_version();
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+
+        assert!(version.is_none());
+    }
+
+    #[test]
+    fn test_write_and_read_version_file() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
+        manpage::write_version_file("1.2.3").unwrap();
+        let version = manpage::read_installed_version();
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+
+        assert_eq!(version, Some("1.2.3".to_string()));
+    }
+
+    #[test]
+    fn test_read_installed_version_trims_whitespace() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+        let ovc_dir = data_home.join("ovc");
+        fs::create_dir_all(&ovc_dir).unwrap();
+        fs::write(ovc_dir.join("man-version"), "1.2.3\n").unwrap();
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
+        let version = manpage::read_installed_version();
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+
+        assert_eq!(version, Some("1.2.3".to_string()));
+    }
+}
+
+mod manpage_integration_tests {
+    use super::*;
+
+    #[test]
+    fn test_ensure_man_page_skips_when_version_matches() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+        let ovc_dir = data_home.join("ovc");
+        fs::create_dir_all(&ovc_dir).unwrap();
+
+        // Write the current version so ensure_man_page skips the fetch
+        let current_version = env!("CARGO_PKG_VERSION");
+        fs::write(ovc_dir.join("man-version"), current_version).unwrap();
+
+        // Run a command with the custom data home — should not attempt a fetch
+        let output = Command::new("cargo")
+            .args(["run", "--", "--help"])
+            .env("XDG_DATA_HOME", &data_home)
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success());
+        // The man-version file should still have the same content (no update attempted)
+        let version = fs::read_to_string(ovc_dir.join("man-version")).unwrap();
+        assert_eq!(version, current_version);
+    }
+
+    #[test]
+    fn test_ensure_man_page_silent_on_fetch_failure() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+
+        // Write a mismatched version so it tries to fetch, but it will fail
+        // because there's no v1.3.3 tag with man/ovc.1 on GitHub yet
+        let ovc_dir = data_home.join("ovc");
+        fs::create_dir_all(&ovc_dir).unwrap();
+        fs::write(ovc_dir.join("man-version"), "0.0.0").unwrap();
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "--help"])
+            .env("XDG_DATA_HOME", &data_home)
+            .output()
+            .expect("Failed to execute ovc command");
+
+        // The command must still succeed even if man page fetch fails
+        assert!(
+            output.status.success(),
+            "Command should succeed despite man page fetch failure"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Non-verbose mode should not print any warnings
+        assert!(
+            !stderr.contains("Warning"),
+            "Non-verbose mode should be silent on fetch failure, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_install_man_page_for_version_bad_version() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let data_home = temp_dir.path().join("data");
+
+        // SAFETY: test runs in a single thread; no concurrent env access
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
+        let result = ovc::manpage::install_man_page_for_version("99.99.99", false);
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+
+        assert!(
+            result.is_err(),
+            "Should fail for a non-existent version tag"
+        );
+    }
+}
