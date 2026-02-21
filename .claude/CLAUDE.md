@@ -49,6 +49,28 @@ the repo root.
 - Never drop or clear git stashes without explicit
   user approval. Always ask first.
 
+## Releases
+
+Releases are cut via the GitHub Actions `release.yaml`
+workflow dispatch. Never bump `Cargo.toml` version
+locally — the workflow handles it.
+
+To release, run:
+
+```sh
+gh workflow run release.yaml -f version=X.Y.Z
+```
+
+- **Patch (Z)**: bug fixes, output tweaks, CI/metadata
+  changes, dependency bumps.
+- **Minor (Y)**: new user-facing features or flags.
+- **Major (X)**: breaking changes to CLI behavior or
+  output that existing scripts depend on.
+
+After triggering, update the release notes on GitHub
+with a human-readable summary grouped by category
+(e.g. Features, Fixes, Internal).
+
 ## Documentation
 
 - Keep all markdown files (`README.md`, `docs/`)
