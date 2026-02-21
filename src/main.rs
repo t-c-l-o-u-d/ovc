@@ -345,7 +345,9 @@ fn cmd_update(verbose: bool) -> Result<(), Box<dyn Error>> {
 
     // Compare versions
     if compare_versions(&latest_version, current_version) != std::cmp::Ordering::Greater {
-        println!("ovc is already up to date (version {current_version})");
+        if verbose {
+            println!("ovc is already up to date (version {current_version})");
+        }
         return Ok(());
     }
 
