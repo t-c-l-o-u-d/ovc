@@ -1531,11 +1531,10 @@ mod manpage_integration_tests {
         let ovc_dir = data_home.join("ovc");
         fs::create_dir_all(&ovc_dir).unwrap();
 
-        // Write the current version so ensure_man_page skips the fetch
+        // Write the current version so ensure_man_page skips the install
         let current_version = env!("CARGO_PKG_VERSION");
         fs::write(ovc_dir.join("man-version"), current_version).unwrap();
 
-        // Run a command with the custom data home — should not attempt a fetch
         let output = Command::new("cargo")
             .args(["run", "--", "--help"])
             .env("XDG_DATA_HOME", &data_home)
@@ -1543,20 +1542,21 @@ mod manpage_integration_tests {
             .expect("Failed to execute ovc command");
 
         assert!(output.status.success());
-        // The man-version file should still have the same content (no update attempted)
-        let version = fs::read_to_string(ovc_dir.join("man-version")).unwrap();
-        assert_eq!(version, current_version);
+        // man1 directory should not be created when version already matches
+        assert!(
+            !data_home.join("man/man1/ovc.1").exists(),
+            "Man page should not be written when version matches"
+        );
     }
 
     #[test]
-    fn test_ensure_man_page_silent_on_fetch_failure() {
+    fn test_ensure_man_page_installs_on_version_mismatch() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
-
-        // Write a mismatched version so it tries to fetch, but it will fail
-        // because there's no v1.3.3 tag with man/ovc.1 on GitHub yet
         let ovc_dir = data_home.join("ovc");
         fs::create_dir_all(&ovc_dir).unwrap();
+
+        // Write a stale version to trigger re-install
         fs::write(ovc_dir.join("man-version"), "0.0.0").unwrap();
 
         let output = Command::new("cargo")
@@ -1565,32 +1565,35 @@ mod manpage_integration_tests {
             .output()
             .expect("Failed to execute ovc command");
 
-        // The command must still succeed even if man page fetch fails
+        assert!(output.status.success());
         assert!(
-            output.status.success(),
-            "Command should succeed despite man page fetch failure"
+            data_home.join("man/man1/ovc.1").exists(),
+            "Man page should be installed on version mismatch"
         );
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        // Non-verbose mode should not print any warnings
-        assert!(
-            !stderr.contains("Warning"),
-            "Non-verbose mode should be silent on fetch failure, got: {stderr}"
-        );
+        let version = fs::read_to_string(ovc_dir.join("man-version")).unwrap();
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
-    fn test_install_man_page_for_version_bad_version() {
+    fn test_ensure_man_page_installs_on_first_run() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
 
-        // SAFETY: test runs in a single thread; no concurrent env access
-        unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
-        let result = ovc::manpage::install_man_page_for_version("99.99.99", false);
-        unsafe { std::env::remove_var("XDG_DATA_HOME") };
+        let output = Command::new("cargo")
+            .args(["run", "--", "--help"])
+            .env("XDG_DATA_HOME", &data_home)
+            .output()
+            .expect("Failed to execute ovc command");
 
+        assert!(output.status.success());
         assert!(
-            result.is_err(),
-            "Should fail for a non-existent version tag"
+            data_home.join("man/man1/ovc.1").exists(),
+            "Man page should be installed on first run"
+        );
+        let man_content = fs::read_to_string(data_home.join("man/man1/ovc.1")).unwrap();
+        assert!(
+            man_content.contains("ovc"),
+            "Installed man page should contain 'ovc'"
         );
     }
 }
