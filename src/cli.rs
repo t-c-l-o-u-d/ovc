@@ -21,9 +21,12 @@ pub enum StandaloneAction {
     about = "OpenShift Client Version Control",
     disable_version_flag = true
 )]
-#[command(arg(clap::Arg::new("version").long("version").action(clap::ArgAction::Version).help("Print version")))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
+    /// Print version
+    #[arg(long = "version")]
+    pub version: bool,
+
     /// Version to download
     #[arg(value_name = "VERSION")]
     pub target_version: Option<String>,

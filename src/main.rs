@@ -55,6 +55,18 @@ fn main() {
         return;
     }
 
+    // Handle --version (with optional --verbose for metadata)
+    if cli.version {
+        if cli.verbose {
+            println!("Version: {}", env!("CARGO_PKG_VERSION"));
+            println!("Source Code: https://github.com/t-c-l-o-u-d/ovc");
+            println!("Author: tcloud");
+        } else {
+            println!("{}", env!("CARGO_PKG_VERSION"));
+        }
+        return;
+    }
+
     let standalone = cli.standalone_action();
     let verbose = cli.verbose;
     let insecure = cli.insecure;

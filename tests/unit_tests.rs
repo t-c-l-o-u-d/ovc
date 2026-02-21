@@ -872,7 +872,20 @@ mod cli_basic_tests {
         let output = run_ovc(&["--version"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("ovc"));
+        // Should print only the version number, no "ovc" prefix
+        let version = env!("CARGO_PKG_VERSION");
+        assert_eq!(stdout.trim(), version);
+    }
+
+    #[test]
+    fn test_version_verbose_command() {
+        let output = run_ovc(&["--version", "--verbose"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let version = env!("CARGO_PKG_VERSION");
+        assert!(stdout.contains(&format!("Version: {version}")));
+        assert!(stdout.contains("Source Code: https://github.com/t-c-l-o-u-d/ovc"));
+        assert!(stdout.contains("Author: tcloud"));
     }
 
     #[test]
