@@ -19,11 +19,4 @@ fn main() {
     // Write to OUT_DIR so the binary can embed the man page at compile time
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
     fs::write(Path::new(&out_dir).join("ovc.1"), &buffer).expect("failed to write man page");
-
-    // Also write to the source tree for git commits.
-    // Silently skip if the filesystem is read-only (e.g. container linters).
-    let man_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("man");
-    if fs::create_dir_all(&man_dir).is_ok() {
-        let _ = fs::write(man_dir.join("ovc.1"), buffer);
-    }
 }
