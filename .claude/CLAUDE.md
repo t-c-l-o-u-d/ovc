@@ -31,8 +31,9 @@ the repo root.
 
 ## Git
 
-- Create GitHub issues for planned work. Use pull
-  requests that reference the issue to close it.
+- Create GitHub issues for planned work. Work on a
+  feature branch and open a pull request that
+  references the issue to close it.
 - Commit messages must be 12 words or fewer.
 - Never include a `Co-Authored-By` line or give
   Claude credit.
