@@ -26,6 +26,9 @@ use flate2::read::GzDecoder;
 
 use tar::Archive;
 
+mod cli;
+use cli::{Cli, StandaloneAction};
+
 // Import from library
 use ovc::cache::{
     get_available_versions, get_available_versions_with_verbose, load_cached_versions,
@@ -35,78 +38,6 @@ use ovc::{
     OC_BIN_DIR, Platform, compare_versions, find_matching_version, is_stable_version,
     matches_version_pattern,
 };
-
-/// Standalone actions that don't require a version argument
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum StandaloneAction {
-    MatchServer,
-    Update,
-}
-
-/// CLI argument parser - bools required for clap flag parsing
-#[derive(Parser)]
-#[command(
-    name = "ovc",
-    version,
-    about = "OpenShift Client Version Control",
-    disable_version_flag = true
-)]
-#[command(arg(clap::Arg::new("version").long("version").action(clap::ArgAction::Version).help("Print version")))]
-#[allow(clippy::struct_excessive_bools)]
-struct Cli {
-    /// Version to download
-    #[arg(value_name = "VERSION")]
-    target_version: Option<String>,
-
-    /// List available versions from the mirror
-    #[arg(short = 'l', long = "list", value_name = "VERSION")]
-    list: Option<String>,
-
-    /// List installed versions
-    #[arg(short = 'i', long = "installed", value_name = "VERSION")]
-    installed: Option<String>,
-
-    /// Remove installed versions
-    #[arg(short = 'p', long = "prune", value_name = "VERSION")]
-    prune: Option<String>,
-
-    /// Download the version matching the currently connected cluster
-    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["update", "list", "installed", "prune"])]
-    match_server: bool,
-
-    /// Update ovc to the latest version from GitHub releases
-    #[arg(short = 'u', long = "update", conflicts_with_all = ["match_server", "list", "installed", "prune"])]
-    update: bool,
-
-    /// Allow insecure TLS connections (skip certificate verification)
-    #[arg(short = 'k', long = "insecure")]
-    insecure: bool,
-
-    /// Make the operation more talkative
-    #[arg(short, long)]
-    verbose: bool,
-
-    /// Generate shell completion script (only bash is supported currently)
-    #[arg(long = "completion", value_name = "SHELL", value_parser = parse_completion_shell)]
-    completion: Option<String>,
-}
-
-impl Cli {
-    fn standalone_action(&self) -> Option<StandaloneAction> {
-        match (self.match_server, self.update) {
-            (true, _) => Some(StandaloneAction::MatchServer),
-            (_, true) => Some(StandaloneAction::Update),
-            _ => None,
-        }
-    }
-}
-
-fn parse_completion_shell(s: &str) -> Result<String, String> {
-    match s.to_lowercase().as_str() {
-        "bash" => Ok(s.to_lowercase()),
-        _ => Err(format!("unsupported shell: {s} (only 'bash' is supported)")),
-    }
-}
 
 /// Main application entry point
 ///
@@ -120,6 +51,9 @@ fn main() {
         print_bash_completion();
         return;
     }
+
+    // Install man page on first run of each new version (silent on failure)
+    ovc::manpage::ensure_man_page(cli.verbose);
 
     let standalone = cli.standalone_action();
     let verbose = cli.verbose;
@@ -429,6 +363,13 @@ fn cmd_update(verbose: bool) -> Result<(), Box<dyn Error>> {
 
     // Replace current binary with the new one
     replace_binary(&temp_path, &current_exe)?;
+
+    // Pre-install the man page for the new version
+    if let Err(e) = ovc::manpage::install_man_page_for_version(&latest_version, verbose)
+        && verbose
+    {
+        eprintln!("Warning: failed to install man page: {e}");
+    }
 
     println!("Updated ovc from {current_version} to {latest_version}");
     Ok(())
