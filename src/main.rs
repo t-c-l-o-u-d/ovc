@@ -44,6 +44,9 @@ use ovc::{
 /// Parses command line arguments and dispatches to appropriate command handlers.
 /// Ensures only one action is specified at a time and provides proper error handling.
 fn main() {
+    // Install man page before parsing so --help and --version also trigger it
+    ovc::manpage::ensure_man_page(false);
+
     let cli = Cli::parse();
 
     // Handle completion generation first (exits immediately)
@@ -51,9 +54,6 @@ fn main() {
         print_bash_completion();
         return;
     }
-
-    // Install man page on first run of each new version (silent on failure)
-    ovc::manpage::ensure_man_page(cli.verbose);
 
     let standalone = cli.standalone_action();
     let verbose = cli.verbose;
@@ -363,13 +363,6 @@ fn cmd_update(verbose: bool) -> Result<(), Box<dyn Error>> {
 
     // Replace current binary with the new one
     replace_binary(&temp_path, &current_exe)?;
-
-    // Pre-install the man page for the new version
-    if let Err(e) = ovc::manpage::install_man_page_for_version(&latest_version, verbose)
-        && verbose
-    {
-        eprintln!("Warning: failed to install man page: {e}");
-    }
 
     println!("Updated ovc from {current_version} to {latest_version}");
     Ok(())
