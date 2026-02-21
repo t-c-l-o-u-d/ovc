@@ -40,6 +40,9 @@ jobs:
               "s/^version = \"$CARGO_VERSION\"/version = \"$VERSION\"/" \
               Cargo.toml
           fi
+      - name: Sync Cargo.lock
+        if: inputs.version != ''
+        run: cargo generate-lockfile
       - name: Commit Version Update
         if: inputs.version != ''
         run: |
