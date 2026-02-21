@@ -46,6 +46,14 @@ versions.
   ovc --match-server
   ```
 
+- View the manual
+
+  ```bash
+  man ovc
+  ```
+
+  The man page is installed automatically on first run.
+
 - Enable bash completion
 
   ```bash
