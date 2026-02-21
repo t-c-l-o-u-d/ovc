@@ -9,6 +9,7 @@
 
 // Re-export public API from organized modules
 pub mod cache;
+pub mod manpage;
 pub mod platform;
 pub mod version;
 
