@@ -216,7 +216,7 @@ pub fn find_matching_version(
     // Look for versions that match major.minor
     let mut candidates: Vec<String> = available_versions
         .iter()
-        .filter(|v| v.starts_with(&server_major_minor))
+        .filter(|v| matches_version_pattern(v, &server_major_minor))
         .cloned()
         .collect();
 
