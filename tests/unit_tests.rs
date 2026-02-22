@@ -444,6 +444,29 @@ mod version_matching_tests {
             Some("4.19.1".to_string())
         );
     }
+
+    #[test]
+    fn test_find_matching_version_no_false_prefix() {
+        let available = vec![
+            "4.1.0".to_string(),
+            "4.1.5".to_string(),
+            "4.10.0".to_string(),
+            "4.10.3".to_string(),
+            "4.13.58".to_string(),
+        ];
+
+        // 4.1.x must not match 4.10.x or 4.13.x
+        assert_eq!(
+            find_matching_version("4.1.2", &available),
+            Some("4.1.5".to_string())
+        );
+
+        // 4.10.x must not match 4.1.x
+        assert_eq!(
+            find_matching_version("4.10.1", &available),
+            Some("4.10.3".to_string())
+        );
+    }
 }
 
 #[cfg(test)]
