@@ -1,7 +1,8 @@
+---
 # GNU Affero General Public License v3.0 or later
 # See LICENSE or https://www.gnu.org/licenses/agpl.txt
 name: Lint
-on:
+"on":
   pull_request:
   push:
     branches: [main]
