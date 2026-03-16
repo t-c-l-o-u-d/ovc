@@ -360,7 +360,7 @@ pub fn format_cache_age(timestamp: u64) -> String {
     let seconds = age_secs % 60;
 
     if days > 0 {
-        format!("{days}d ago")
+        format!("{days}d {hours}h ago")
     } else if hours > 0 {
         format!("{hours}h ago")
     } else if minutes > 0 {

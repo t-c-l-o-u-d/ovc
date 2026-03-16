@@ -768,7 +768,7 @@ mod cache_unit_tests {
             .unwrap()
             .as_secs();
         let result = format_cache_age(now - 172_800); // 48 hours
-        assert_eq!(result, "2d ago");
+        assert_eq!(result, "2d 0h ago");
     }
 
     #[test]
