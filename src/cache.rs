@@ -2,8 +2,8 @@
 //! Cache management for OpenShift client versions
 //!
 //! This module handles caching of version information with download URLs for all platforms
-//! to minimize API calls to the OpenShift mirror. The cache never expires automatically
-//! and is only updated when requested versions are not found.
+//! to minimize API calls to the OpenShift mirror. The cache expires after 72 hours and is
+//! also updated when requested versions are not found.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -14,6 +14,9 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 
 use crate::{Platform, compare_versions};
+
+/// Cache time-to-live: 72 hours in seconds
+const CACHE_TTL_SECS: u64 = 72 * 60 * 60;
 
 /// Version information with download URLs for all platforms
 #[derive(Serialize, Deserialize, Clone)]
@@ -27,8 +30,8 @@ pub struct VersionInfo {
 /// Cache structure for storing version information with timestamp
 ///
 /// This structure is used to cache the list of available versions from the
-/// OpenShift mirror to avoid repeated network requests. The cache no longer
-/// expires and is only updated when requested versions are not found.
+/// OpenShift mirror to avoid repeated network requests. The cache expires
+/// after 72 hours and is also updated when requested versions are not found.
 #[derive(Serialize, Deserialize)]
 pub struct VersionCache {
     /// List of available versions with platform URLs
@@ -64,6 +67,19 @@ impl VersionCache {
         Self {
             versions,
             timestamp: current_unix_timestamp(),
+        }
+    }
+
+    /// Create a version cache with a specific timestamp (for testing)
+    ///
+    /// # Arguments
+    /// * `versions` - Vector of VersionInfo to cache
+    /// * `timestamp` - Unix timestamp (seconds since epoch)
+    #[must_use]
+    pub fn with_timestamp(versions: Vec<VersionInfo>, timestamp: u64) -> Self {
+        Self {
+            versions,
+            timestamp,
         }
     }
 
@@ -112,6 +128,12 @@ impl VersionCache {
     #[must_use]
     pub fn timestamp(&self) -> u64 {
         self.timestamp
+    }
+
+    /// Check if the cache has exceeded its TTL (72 hours)
+    #[must_use]
+    pub fn is_expired(&self) -> bool {
+        current_unix_timestamp().saturating_sub(self.timestamp) >= CACHE_TTL_SECS
     }
 }
 
@@ -318,11 +340,14 @@ pub fn format_cache_age(timestamp: u64) -> String {
     let now = current_unix_timestamp();
     let age_secs = now.saturating_sub(timestamp);
 
-    let hours = age_secs / 3600;
+    let days = age_secs / 86400;
+    let hours = (age_secs % 86400) / 3600;
     let minutes = (age_secs % 3600) / 60;
     let seconds = age_secs % 60;
 
-    if hours > 0 {
+    if days > 0 {
+        format!("{days}d ago")
+    } else if hours > 0 {
         format!("{hours}h ago")
     } else if minutes > 0 {
         format!("{minutes}m ago")
@@ -384,8 +409,8 @@ pub fn get_available_versions() -> Result<Vec<String>, Box<dyn Error>> {
 
 /// Get available versions from the OpenShift mirror with optional verbose output
 ///
-/// Uses cached data if available. Only fetches from the mirror if no cache exists.
-/// To update the cache when a specific version is missing, use update_cache_for_missing_version.
+/// Uses cached data if available and not expired (72-hour TTL). Fetches from the
+/// mirror if no cache exists or the cache has expired.
 ///
 /// # Arguments
 /// * `verbose` - Whether to show cache status and fetch progress
@@ -398,19 +423,26 @@ pub fn get_available_versions() -> Result<Vec<String>, Box<dyn Error>> {
 pub fn get_available_versions_with_verbose(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
     // Try to load from cache first
     if let Some(cache) = load_cached_versions()? {
-        if verbose {
-            eprintln!(
-                "Using cached versions (last updated: {})",
-                format_cache_age(cache.timestamp())
-            );
+        if cache.is_expired() {
+            if verbose {
+                eprintln!(
+                    "Cache expired (last updated: {}), refreshing...",
+                    format_cache_age(cache.timestamp())
+                );
+            }
+        } else {
+            if verbose {
+                eprintln!(
+                    "Using cached versions (last updated: {})",
+                    format_cache_age(cache.timestamp())
+                );
+            }
+            return Ok(cache.get_version_strings());
         }
-        return Ok(cache.get_version_strings());
-    }
-
-    if verbose {
+    } else if verbose {
         eprintln!("No cache found, fetching versions from API...");
     }
 
-    // No cache exists, fetch from API and create initial cache
+    // No valid cache, fetch from API
     fetch_and_cache_all_versions(verbose)
 }
