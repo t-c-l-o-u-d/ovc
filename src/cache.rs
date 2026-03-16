@@ -70,11 +70,8 @@ impl VersionCache {
         }
     }
 
-    /// Create a version cache with a specific timestamp (for testing)
-    ///
-    /// # Arguments
-    /// * `versions` - Vector of VersionInfo to cache
-    /// * `timestamp` - Unix timestamp (seconds since epoch)
+    /// Create a version cache with a specific timestamp.
+    #[doc(hidden)]
     #[must_use]
     pub fn with_timestamp(versions: Vec<VersionInfo>, timestamp: u64) -> Self {
         Self {
