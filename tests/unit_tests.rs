@@ -760,11 +760,50 @@ mod cache_unit_tests {
             "Expected 'Nm ago', got: {result}"
         );
     }
+
+    #[test]
+    fn test_format_cache_age_days() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let result = format_cache_age(now - 172_800); // 48 hours
+        assert_eq!(result, "2d ago");
+    }
+
+    #[test]
+    fn test_cache_is_expired_fresh() {
+        let cache = VersionCache::new(vec![]);
+        assert!(!cache.is_expired());
+    }
+
+    #[test]
+    fn test_cache_is_expired_old() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://example.com/4.19.0");
+        let cache = VersionCache::with_timestamp(vec![v], now - 73 * 3600);
+        assert!(cache.is_expired());
+    }
+
+    #[test]
+    fn test_cache_is_expired_boundary() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let v = make_version_info("4.19.0", "linux-x86_64", "https://example.com/4.19.0");
+        let cache = VersionCache::with_timestamp(vec![v], now - 72 * 3600);
+        assert!(cache.is_expired());
+    }
 }
 
 #[cfg(test)]
 mod cache_integration_tests {
     use super::*;
+    use std::time::SystemTime;
 
     #[test]
     fn test_cache_roundtrip_via_list() {
@@ -834,6 +873,49 @@ mod cache_integration_tests {
         assert!(
             content.contains("urls"),
             "Cache should have been migrated to new format"
+        );
+    }
+
+    #[test]
+    fn test_cache_expired_triggers_refresh() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join("cache");
+        let ovc_cache_dir = cache_dir.join("ovc");
+        fs::create_dir_all(&ovc_cache_dir).unwrap();
+        let cache_file = ovc_cache_dir.join("versions.json");
+
+        // Write a cache with a timestamp 4 days ago (well past 72h TTL)
+        let old_timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - 4 * 86400;
+        let old_cache = format!(
+            r#"{{"versions":[{{"version":"4.19.0","urls":{{"linux-x86_64":"https://example.com"}}}}],"timestamp":{old_timestamp}}}"#
+        );
+        fs::write(&cache_file, old_cache).unwrap();
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "-v", "--list", "4.19"])
+            .env("XDG_CACHE_HOME", &cache_dir)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(
+            output.status.success(),
+            "List with expired cache failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Cache expired"),
+            "Expected cache expiration message, got: {stderr}"
+        );
+        assert!(
+            !stderr.contains("Using cached versions"),
+            "Should not use expired cache, got: {stderr}"
         );
     }
 
