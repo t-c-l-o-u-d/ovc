@@ -768,7 +768,7 @@ mod cache_unit_tests {
             .unwrap()
             .as_secs();
         let result = format_cache_age(now - 172_800); // 48 hours
-        assert_eq!(result, "2d ago");
+        assert_eq!(result, "2d 0h ago");
     }
 
     #[test]
@@ -890,32 +890,28 @@ mod cache_integration_tests {
             .unwrap()
             .as_secs()
             - 4 * 86400;
+        // Use a fake version so stale data is distinguishable from fresh data
         let old_cache = format!(
-            r#"{{"versions":[{{"version":"4.19.0","urls":{{"linux-x86_64":"https://example.com"}}}}],"timestamp":{old_timestamp}}}"#
+            r#"{{"versions":[{{"version":"99.99.99","urls":{{"linux-x86_64":"https://example.com"}}}}],"timestamp":{old_timestamp}}}"#
         );
         fs::write(&cache_file, old_cache).unwrap();
 
         let output = Command::new("cargo")
-            .args(["run", "--", "-v", "--list", "4.19"])
+            .args(["run", "--", "-v", "--list", "99.99"])
             .env("XDG_CACHE_HOME", &cache_dir)
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
 
-        assert!(
-            output.status.success(),
-            "List with expired cache failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             stderr.contains("Cache expired"),
             "Expected cache expiration message, got: {stderr}"
         );
         assert!(
-            !stderr.contains("Using cached versions"),
-            "Should not use expired cache, got: {stderr}"
+            !stdout.contains("99.99.99"),
+            "Stale version should not appear in output, got: {stdout}"
         );
     }
 

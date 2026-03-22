@@ -70,11 +70,8 @@ impl VersionCache {
         }
     }
 
-    /// Create a version cache with a specific timestamp (for testing)
-    ///
-    /// # Arguments
-    /// * `versions` - Vector of VersionInfo to cache
-    /// * `timestamp` - Unix timestamp (seconds since epoch)
+    /// Create a version cache with a specific timestamp.
+    #[doc(hidden)]
     #[must_use]
     pub fn with_timestamp(versions: Vec<VersionInfo>, timestamp: u64) -> Self {
         Self {
@@ -165,17 +162,17 @@ pub fn get_cache_file_path() -> Result<PathBuf, Box<dyn Error>> {
     Ok(get_cache_dir()?.join("versions.json"))
 }
 
-/// Load cached version data if it exists
+/// Load cached version data if it exists, ignoring TTL
 ///
-/// Attempts to load the version cache from disk. If the cache file doesn't exist,
-/// returns None. Handles migration from legacy cache format to new format.
+/// Returns the cache even if expired. Use `load_cached_versions` for
+/// TTL-aware loading.
 ///
 /// # Returns
-/// `Some(VersionCache)` if valid cache exists, `None` otherwise
+/// `Some(VersionCache)` if cache file exists and is parseable, `None` otherwise
 ///
 /// # Errors
 /// Returns error if the cache file exists but cannot be read
-pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
+fn load_cached_versions_raw() -> Result<Option<VersionCache>, Box<dyn Error>> {
     let cache_file = get_cache_file_path()?;
 
     if !cache_file.exists() {
@@ -206,6 +203,23 @@ pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
     // If neither format works, remove the corrupted cache file
     let _ = fs::remove_file(&cache_file);
     Ok(None)
+}
+
+/// Load cached version data if it exists and has not expired
+///
+/// Returns `None` if the cache file doesn't exist, can't be parsed, or has
+/// exceeded the 72-hour TTL.
+///
+/// # Returns
+/// `Some(VersionCache)` if valid, non-expired cache exists, `None` otherwise
+///
+/// # Errors
+/// Returns error if the cache file exists but cannot be read
+pub fn load_cached_versions() -> Result<Option<VersionCache>, Box<dyn Error>> {
+    match load_cached_versions_raw()? {
+        Some(cache) if cache.is_expired() => Ok(None),
+        other => Ok(other),
+    }
 }
 
 /// Save version data to cache for future use
@@ -346,7 +360,7 @@ pub fn format_cache_age(timestamp: u64) -> String {
     let seconds = age_secs % 60;
 
     if days > 0 {
-        format!("{days}d ago")
+        format!("{days}d {hours}h ago")
     } else if hours > 0 {
         format!("{hours}h ago")
     } else if minutes > 0 {
@@ -421,8 +435,8 @@ pub fn get_available_versions() -> Result<Vec<String>, Box<dyn Error>> {
 /// # Errors
 /// Returns error if versions cannot be fetched from cache or API
 pub fn get_available_versions_with_verbose(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
-    // Try to load from cache first
-    if let Some(cache) = load_cached_versions()? {
+    // Use raw loader so we can print expiry/freshness messages
+    if let Some(cache) = load_cached_versions_raw()? {
         if cache.is_expired() {
             if verbose {
                 eprintln!(
