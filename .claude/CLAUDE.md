@@ -67,9 +67,7 @@ gh workflow run release.yaml -f version=X.Y.Z
 - **Major (X)**: breaking changes to CLI behavior or
   output that existing scripts depend on.
 
-After triggering, update the release notes on GitHub
-with a human-readable summary grouped by category
-(e.g. Features, Fixes, Internal).
+Release notes are auto-generated from PR history.
 
 ## Documentation
 
