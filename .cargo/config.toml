@@ -14,8 +14,5 @@ incremental = true
 [net]
 git-fetch-with-cli = true
 
-[registries.crates-io]
-protocol = "sparse"
-
 [cargo-new]
 edition = "2024"
