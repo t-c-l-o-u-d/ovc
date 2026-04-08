@@ -1,4 +1,4 @@
-// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Version comparison and utility functions for OpenShift client versions
 //!
 //! This module provides utilities for parsing, comparing, and manipulating

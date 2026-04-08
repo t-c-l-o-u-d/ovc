@@ -1,4 +1,4 @@
-// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Platform detection and URL building for OpenShift client binaries
 //!
 //! This module provides functionality for detecting the current platform and

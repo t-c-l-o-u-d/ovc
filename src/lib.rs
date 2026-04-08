@@ -1,4 +1,4 @@
-// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Allow multiple crate versions for Windows-only dependencies (we only target Linux)
 #![allow(clippy::multiple_crate_versions)]
 //! OpenShift Client Version Control Library

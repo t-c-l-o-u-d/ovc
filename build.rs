@@ -1,4 +1,4 @@
-// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fs;
 use std::path::Path;
