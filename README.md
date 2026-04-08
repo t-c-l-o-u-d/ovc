@@ -60,10 +60,10 @@ versions.
   source <(ovc --completion bash)
   ```
 
-- Update ovc to the latest release
+- Remove all installed versions (except the active one)
 
   ```bash
-  ovc --update
+  ovc --prune
   ```
 
 ## References

@@ -10,7 +10,6 @@ use clap::Parser;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StandaloneAction {
     MatchServer,
-    Update,
 }
 
 /// CLI argument parser - bools required for clap flag parsing
@@ -39,17 +38,13 @@ pub struct Cli {
     #[arg(short = 'i', long = "installed", value_name = "VERSION")]
     pub installed: Option<String>,
 
-    /// Remove installed versions
-    #[arg(short = 'p', long = "prune", value_name = "VERSION")]
-    pub prune: Option<String>,
+    /// Remove all installed versions
+    #[arg(short = 'p', long = "prune", conflicts_with_all = ["list", "installed", "match_server"])]
+    pub prune: bool,
 
     /// Download the version matching the currently connected cluster
-    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["update", "list", "installed", "prune"])]
+    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["list", "installed", "prune"])]
     pub match_server: bool,
-
-    /// Update ovc to the latest version from GitHub releases
-    #[arg(short = 'u', long = "update", conflicts_with_all = ["match_server", "list", "installed", "prune"])]
-    pub update: bool,
 
     /// Allow insecure TLS connections (skip certificate verification)
     #[arg(short = 'k', long = "insecure")]
@@ -67,10 +62,10 @@ pub struct Cli {
 impl Cli {
     #[must_use]
     pub fn standalone_action(&self) -> Option<StandaloneAction> {
-        match (self.match_server, self.update) {
-            (true, _) => Some(StandaloneAction::MatchServer),
-            (_, true) => Some(StandaloneAction::Update),
-            _ => None,
+        if self.match_server {
+            Some(StandaloneAction::MatchServer)
+        } else {
+            None
         }
     }
 }

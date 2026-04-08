@@ -23,6 +23,9 @@ main() {
   step "Preparing binary artifact"
   cp target/release/ovc "ovc-${arch}"
 
+  step "Generating checksum"
+  sha256sum "ovc-${arch}" | awk '{print $1}' >"ovc-${arch}.sha256"
+
   step "Build completed successfully"
 }
 

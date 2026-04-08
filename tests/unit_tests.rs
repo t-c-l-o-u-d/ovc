@@ -1176,22 +1176,18 @@ mod cli_prune_tests {
     use super::*;
 
     #[test]
-    fn test_prune_matching_versions() {
-        // This test needs to be careful not to actually remove versions
-        // We'll test the error case when no versions match
-        let output = run_ovc(&["--prune", "999.999"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("No installed versions found matching 999.999"));
-    }
+    fn test_prune_no_versions_installed() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let output = Command::new("cargo")
+            .args(["run", "--", "--prune"])
+            .env("HOME", temp_dir.path())
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
 
-    #[test]
-    fn test_prune_verbose_mode() {
-        // Test verbose mode for prune (if any versions match)
-        let output = run_ovc(&["-v", "--prune", "999.999"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("No installed versions found matching"));
+        assert!(stderr.contains("No installed versions found"));
     }
 }
 
@@ -1230,7 +1226,7 @@ mod cli_match_server_tests {
 
     #[test]
     fn test_match_server_mutual_exclusivity_with_prune() {
-        let output = run_ovc(&["--match-server", "--prune", "4.19"]);
+        let output = run_ovc(&["--match-server", "--prune"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("cannot be used with"));
@@ -1239,43 +1235,6 @@ mod cli_match_server_tests {
     #[test]
     fn test_match_server_mutual_exclusivity_with_installed() {
         let output = run_ovc(&["--match-server", "--installed", "4.19"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("cannot be used with"));
-    }
-}
-
-#[cfg(test)]
-mod cli_update_tests {
-    use super::*;
-
-    #[test]
-    fn test_update_mutual_exclusivity_with_list() {
-        let output = run_ovc(&["--update", "--list", "4.19"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("cannot be used with"));
-    }
-
-    #[test]
-    fn test_update_mutual_exclusivity_with_prune() {
-        let output = run_ovc(&["--update", "--prune", "4.19"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("cannot be used with"));
-    }
-
-    #[test]
-    fn test_update_mutual_exclusivity_with_installed() {
-        let output = run_ovc(&["--update", "--installed", "4.19"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("cannot be used with"));
-    }
-
-    #[test]
-    fn test_update_mutual_exclusivity_with_match_server() {
-        let output = run_ovc(&["--update", "--match-server"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("cannot be used with"));
@@ -1346,14 +1305,25 @@ mod cli_prune_isolated_tests {
         }
     }
 
+    fn set_active_version(home: &std::path::Path, version: &str) {
+        let local_bin = home.join(".local/bin");
+        fs::create_dir_all(&local_bin).unwrap();
+        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        let target = bin_dir.join(format!("oc-{version}"));
+        let link = local_bin.join("oc");
+        let _ = fs::remove_file(&link);
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+    }
+
     #[test]
-    fn test_prune_removes_matching_files() {
+    fn test_prune_removes_inactive_versions() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.0", "4.19.1", "4.20.0"]);
+        set_active_version(home, "4.20.0");
 
         let output = Command::new("cargo")
-            .args(["run", "--", "--prune", "4.19"])
+            .args(["run", "--", "--prune"])
             .env("HOME", home)
             .env("PATH", path_without_oc())
             .output()
@@ -1374,7 +1344,10 @@ mod cli_prune_isolated_tests {
             !bin_dir.join("oc-4.19.1").exists(),
             "4.19.1 should be removed"
         );
-        assert!(bin_dir.join("oc-4.20.0").exists(), "4.20.0 should remain");
+        assert!(
+            bin_dir.join("oc-4.20.0").exists(),
+            "4.20.0 should remain (active)"
+        );
     }
 
     #[test]
@@ -1384,7 +1357,7 @@ mod cli_prune_isolated_tests {
         create_fake_binaries(home, &["4.19.0", "4.19.1"]);
 
         let output = Command::new("cargo")
-            .args(["run", "--", "-v", "--prune", "4.19"])
+            .args(["run", "--", "-v", "--prune"])
             .env("HOME", home)
             .env("PATH", path_without_oc())
             .output()
@@ -1399,18 +1372,10 @@ mod cli_prune_isolated_tests {
     }
 
     #[test]
-    fn test_prune_invalid_format() {
-        let output = run_ovc(&["--prune", "4"]);
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Version must include at least major and minor version"));
-    }
-
-    #[test]
-    fn test_prune_empty_dir_no_matches() {
+    fn test_prune_empty_dir() {
         let temp_dir = TestTempDir::new().unwrap();
         let output = Command::new("cargo")
-            .args(["run", "--", "--prune", "4.19"])
+            .args(["run", "--", "--prune"])
             .env("HOME", temp_dir.path())
             .env("PATH", path_without_oc())
             .output()
@@ -1418,7 +1383,7 @@ mod cli_prune_isolated_tests {
 
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("No installed versions found matching"));
+        assert!(stderr.contains("No installed versions found"));
     }
 }
 

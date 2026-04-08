@@ -1,4 +1,4 @@
-// GNU Affero General Public License v3.0 or later (see LICENSE or https://www.gnu.org/licenses/agpl.txt)
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Allow multiple crate versions for Windows-only dependencies (we only target Linux)
 #![allow(clippy::multiple_crate_versions)]
 //! OpenShift Client Version Control (ovc) - Main Application
@@ -11,7 +11,8 @@
 //! - Downloading specific versions of the OpenShift client
 //! - Listing available versions from the mirror
 //! - Managing installed versions locally
-//! - Pruning old or unused versions
+//! - Pruning inactive versions
+//! - Auto-updating from GitHub releases
 //! - Automatic platform detection
 //! - Version caching for improved performance
 
@@ -28,6 +29,8 @@ use tar::Archive;
 
 mod cli;
 use cli::{Cli, StandaloneAction};
+
+mod update;
 
 // Import from library
 use ovc::cache::{
@@ -71,18 +74,19 @@ fn main() {
     let verbose = cli.verbose;
     let insecure = cli.insecure;
 
+    update::try_auto_update(verbose);
+
     // Dispatch to appropriate command handler
     // Note: conflicts_with_all ensures mutual exclusivity at parse time
     let result = if let Some(version_pattern) = cli.list {
         cmd_list_available(&version_pattern, verbose)
     } else if let Some(version_pattern) = cli.installed {
         cmd_list_installed(&version_pattern, verbose)
-    } else if let Some(version_pattern) = cli.prune {
-        cmd_prune(&version_pattern, verbose)
+    } else if cli.prune {
+        cmd_prune(verbose)
     } else if let Some(action) = standalone {
         match action {
             StandaloneAction::MatchServer => cmd_match_server(verbose, insecure),
-            StandaloneAction::Update => cmd_update(verbose),
         }
     } else {
         // Default action: download, but require a version
@@ -245,39 +249,37 @@ fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
 /// # Arguments
 /// * `version_pattern` - Version pattern to match (e.g. "4.19")
 /// * `verbose` - Whether to show detailed removal progress
-fn cmd_prune(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
-    // Validate minimum version format (must have at least major.minor)
-    let parts: Vec<&str> = version_pattern.split('.').collect();
-    if parts.len() < 2 {
-        return Err("Version must include at least major and minor version (e.g. 4.19)".into());
-    }
-
+fn cmd_prune(verbose: bool) -> Result<(), Box<dyn Error>> {
     let installed_versions = list_installed_versions()?;
 
-    // Filter versions that match the pattern
-    let matching_versions: Vec<String> = installed_versions
-        .into_iter()
-        .filter(|v| matches_version_pattern(v, version_pattern))
-        .collect();
-
-    if matching_versions.is_empty() {
-        return Err(format!("No installed versions found matching {version_pattern}").into());
+    if installed_versions.is_empty() {
+        return Err("No installed versions found".into());
     }
 
-    // Remove the versions
+    // Determine the active version from the ~/.local/bin/oc symlink
+    let active_version = active_oc_version();
+
     let bin_dir = get_bin_dir()?;
-    for version in &matching_versions {
+    let mut removed = 0;
+    for version in &installed_versions {
+        if active_version.as_deref() == Some(version.as_str()) {
+            if verbose {
+                eprintln!("Keeping active version: {version}");
+            }
+            continue;
+        }
         let oc_path = bin_dir.join(format!("oc-{version}"));
         if oc_path.exists() {
             if verbose {
                 eprintln!("Removing: {}", oc_path.display());
             }
             std::fs::remove_file(&oc_path)?;
+            removed += 1;
         }
     }
 
     if verbose {
-        eprintln!("Removed {} version(s)", matching_versions.len());
+        eprintln!("Removed {removed} version(s)");
     }
 
     Ok(())
@@ -328,155 +330,6 @@ fn cmd_match_server(verbose: bool, insecure: bool) -> Result<(), Box<dyn Error>>
         eprintln!("Installed and set as default: {version}");
         check_path_warnings(verbose);
     }
-
-    Ok(())
-}
-
-/// GitHub repository owner
-const GITHUB_OWNER: &str = "t-c-l-o-u-d";
-/// GitHub repository name
-const GITHUB_REPO: &str = "ovc";
-
-/// Update ovc to the latest version from GitHub releases
-///
-/// Checks the latest release on GitHub and updates if a newer version is available.
-/// If already on the latest version, prints a message and shows the current version.
-fn cmd_update(verbose: bool) -> Result<(), Box<dyn Error>> {
-    let current_version = env!("CARGO_PKG_VERSION");
-
-    if verbose {
-        eprintln!("Current version: {current_version}");
-        eprintln!("Checking for updates...");
-    }
-
-    let (latest_version, download_url) = get_latest_github_release(verbose)?;
-
-    if verbose {
-        eprintln!("Latest version: {latest_version}");
-    }
-
-    // Compare versions
-    if compare_versions(&latest_version, current_version) != std::cmp::Ordering::Greater {
-        if verbose {
-            println!("ovc is already up to date (version {current_version})");
-        }
-        return Ok(());
-    }
-
-    if verbose {
-        eprintln!("Downloading update from: {download_url}");
-    }
-
-    // Get the path to the current executable
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current executable path: {e}"))?;
-
-    // Download to a temporary file
-    let temp_path = current_exe.with_extension("update");
-    download_update(&download_url, &temp_path)?;
-
-    // Replace current binary with the new one
-    replace_binary(&temp_path, &current_exe)?;
-
-    println!("Updated ovc from {current_version} to {latest_version}");
-    Ok(())
-}
-
-/// Fetch the latest release information from GitHub
-fn get_latest_github_release(verbose: bool) -> Result<(String, String), Box<dyn Error>> {
-    let api_url =
-        format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest");
-
-    if verbose {
-        eprintln!("Fetching release info from: {api_url}");
-    }
-
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
-        .build()?;
-
-    let resp = client.get(&api_url).send()?;
-
-    if !resp.status().is_success() {
-        return Err(format!(
-            "Failed to fetch release info: {} ({})",
-            api_url,
-            resp.status()
-        )
-        .into());
-    }
-
-    let release: serde_json::Value = serde_json::from_str(&resp.text()?)?;
-
-    // Get the tag name (version)
-    let tag_name = release["tag_name"]
-        .as_str()
-        .ok_or("No tag_name in release")?;
-
-    // Strip 'v' prefix if present
-    let version = tag_name.strip_prefix('v').unwrap_or(tag_name);
-
-    // Find the linux-x86_64 asset
-    let assets = release["assets"].as_array().ok_or("No assets in release")?;
-
-    let download_url = assets
-        .iter()
-        .find_map(|asset| {
-            let name = asset["name"].as_str()?;
-            if name.contains("linux") && (name.contains("x86_64") || name.contains("amd64")) {
-                asset["browser_download_url"].as_str().map(String::from)
-            } else {
-                None
-            }
-        })
-        .ok_or("No linux-x86_64 binary found in release assets")?;
-
-    Ok((version.to_string(), download_url))
-}
-
-/// Download the update binary
-fn download_update(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
-        .build()?;
-
-    let resp = client.get(url).send()?;
-
-    if !resp.status().is_success() {
-        return Err(format!("Failed to download update: {} ({})", url, resp.status()).into());
-    }
-
-    let bytes = resp.bytes()?;
-    fs::write(dest, &bytes)?;
-    set_executable(&dest.to_path_buf())?;
-
-    Ok(())
-}
-
-/// Replace the current binary with the new one
-fn replace_binary(new_binary: &Path, current_binary: &Path) -> Result<(), Box<dyn Error>> {
-    // On Unix, we can replace a running binary by:
-    // 1. Rename current to .old
-    // 2. Move new to current location
-    // 3. Remove .old
-    let old_path = current_binary.with_extension("old");
-
-    // Remove old backup if it exists
-    let _ = fs::remove_file(&old_path);
-
-    // Rename current to .old
-    fs::rename(current_binary, &old_path)
-        .map_err(|e| format!("Failed to backup current binary: {e}"))?;
-
-    // Move new binary to current location
-    if let Err(e) = fs::rename(new_binary, current_binary) {
-        // Try to restore the old binary
-        let _ = fs::rename(&old_path, current_binary);
-        return Err(format!("Failed to install new binary: {e}").into());
-    }
-
-    // Remove old binary
-    let _ = fs::remove_file(&old_path);
 
     Ok(())
 }
@@ -860,6 +713,14 @@ fn list_installed_versions() -> Result<Vec<String>, Box<dyn Error>> {
     Ok(versions)
 }
 
+fn active_oc_version() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let symlink = PathBuf::from(&home).join(".local/bin/oc");
+    let target = fs::read_link(&symlink).ok()?;
+    let fname = target.file_name()?.to_str()?;
+    fname.strip_prefix("oc-").map(String::from)
+}
+
 /// Check if a version exists on the OpenShift mirror
 ///
 /// First checks the cache for the version URL, then falls back to HTTP request.
@@ -1003,10 +864,8 @@ _ovc_completions() {{
             "--list          (List available versions from the mirror)"
             "-m              (Download version matching connected cluster)"
             "--match-server  (Download version matching connected cluster)"
-            "-p              (Remove installed versions)"
-            "--prune         (Remove installed versions)"
-            "-u              (Update ovc to latest version)"
-            "--update        (Update ovc to latest version)"
+            "-p              (Remove all installed versions except active)"
+            "--prune         (Remove all installed versions except active)"
             "-v              (Make the operation more talkative)"
             "--verbose       (Make the operation more talkative)"
             "--version       (Print version)"

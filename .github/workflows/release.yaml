@@ -68,6 +68,11 @@ jobs:
         with:
           name: ovc-linux-x86_64
           path: ovc-linux-x86_64
+      - name: Upload Checksum Artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ovc-linux-x86_64.sha256
+          path: ovc-linux-x86_64.sha256
       - name: Create Release
         if: inputs.version != ''
         env:
@@ -77,4 +82,5 @@ jobs:
             "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --generate-notes \
-            ovc-linux-x86_64
+            ovc-linux-x86_64 \
+            ovc-linux-x86_64.sha256
