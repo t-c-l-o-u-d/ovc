@@ -20,7 +20,7 @@
       "Bash(gh pr checks *)",
       "Bash(gh pr list)",
       "Bash(gh run list)",
-      "Bash(gh run view)",
+      "Bash(gh run view *)",
       "Bash(git checkout *)",
       "Bash(git fetch)",
       "Bash(git pull)",
