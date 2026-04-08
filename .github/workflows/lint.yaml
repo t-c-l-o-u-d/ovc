@@ -8,29 +8,18 @@ name: CI
     branches: [main]
 permissions:
   contents: read
+  packages: read
 jobs:
   lint:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        linter:
-          - bash
-          - markdown
-          - rust
-          - yaml
-    container:
-      image: >-
-        ghcr.io/t-c-l-o-u-d/linter-images/lint-${{ matrix.linter }}:latest
-      options: --user 0
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - run: /usr/local/bin/lint
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - run: cargo test
+      - run: |-
+          gh release download --repo t-c-l-o-u-d/vlint --pattern '*x86_64-linux' --output /tmp/vlint
+          sudo install -m755 /tmp/vlint /usr/local/bin/vlint
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: vlint
   build:
     runs-on: ubuntu-latest
     steps:
