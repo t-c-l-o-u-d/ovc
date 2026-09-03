@@ -2,7 +2,7 @@
 name = "ovc"
 version = "1.5.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.98.1"
 description = "CLI application to manage OpenShift client versions"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/t-c-l-o-u-d/ovc"

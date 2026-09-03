@@ -6,6 +6,7 @@ set -o errexit -o nounset -o pipefail
 CARGO_AUDIT_VERSION="0.22.2"
 CARGO_DENY_VERSION="0.20.2"
 RUMDL_VERSION="0.2.64"
+RUST_VERSION="$(grep --max-count=1 '^channel' rust-toolchain.toml | cut --delimiter='"' --fields=2)"
 SHELLCHECK_VERSION="0.11.0"
 SHFMT_VERSION="3.14.0"
 YAMLFMT_VERSION="0.21.0"
@@ -39,6 +40,14 @@ gh release download "v${RUMDL_VERSION}" --repo rvben/rumdl \
 tar --extract --file /tmp/rumdl.tar.gz --directory /tmp rumdl
 install --mode=755 /tmp/rumdl "${BIN_DIR}/rumdl"
 
+echo -e "\n[rust]"
+MSRV="$(grep --max-count=1 '^rust-version' Cargo.toml | cut --delimiter='"' --fields=2)"
+if [[ "${MSRV}" != "${RUST_VERSION}" ]]; then
+  echo "Toolchain ${RUST_VERSION} does not match MSRV ${MSRV}"
+  exit 1
+fi
+rustup toolchain install --no-self-update
+
 echo -e "\n[shellcheck]"
 gh release download "v${SHELLCHECK_VERSION}" --repo koalaman/shellcheck \
   --pattern "shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.gz" \
@@ -61,9 +70,23 @@ tar --extract --file /tmp/yamlfmt.tar.gz --directory /tmp yamlfmt
 install --mode=755 /tmp/yamlfmt "${BIN_DIR}/yamlfmt"
 
 echo -e "\n[yamllint]"
-PIPX_HOME="${HOME}/.pipx" PIPX_BIN_DIR="${BIN_DIR}" pipx install --force "yamllint==${YAMLLINT_VERSION}"
+PIPX_HOME="${HOME}/.pipx" PIPX_BIN_DIR="${BIN_DIR}" pipx install --force --quiet "yamllint==${YAMLLINT_VERSION}"
+
+verify_version() {
+  local bin="${1}" want="${2}" got
+  if ! got="$("${bin}" --version 2>&1)"; then
+    echo "${bin##*/} failed to report a version"
+    exit 1
+  fi
+  if [[ "${got}" != *"${want}"* ]]; then
+    echo "${bin##*/}: want ${want}, got ${got}"
+    exit 1
+  fi
+  echo "${bin##*/} ${want}"
+}
 
 echo -e "\n[verify]"
+verify_version "$(command -v rustc)" "${RUST_VERSION}"
 for pair in \
   "cargo-audit=${CARGO_AUDIT_VERSION}" \
   "cargo-deny=${CARGO_DENY_VERSION}" \
@@ -72,15 +95,5 @@ for pair in \
   "shfmt=${SHFMT_VERSION}" \
   "yamlfmt=${YAMLFMT_VERSION}" \
   "yamllint=${YAMLLINT_VERSION}"; do
-  tool="${pair%%=*}"
-  want="${pair#*=}"
-  if ! got="$("${BIN_DIR}/${tool}" --version 2>&1)"; then
-    echo "${tool} failed to report a version"
-    exit 1
-  fi
-  if [[ "${got}" != *"${want}"* ]]; then
-    echo "${tool}: want ${want}, got ${got}"
-    exit 1
-  fi
-  echo "${tool} ${want}"
+  verify_version "${BIN_DIR}/${pair%%=*}" "${pair#*=}"
 done

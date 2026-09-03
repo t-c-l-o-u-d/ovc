@@ -35,9 +35,6 @@ cargo fmt -- --check --files-with-diff
 echo -e "\n[cargo-test]"
 cargo test --release --quiet
 
-echo -e "\n[cargo-tree]"
-cargo tree --duplicates --quiet
-
 echo -e "\n[rumdl]"
 rumdl check .
 

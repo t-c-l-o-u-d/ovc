@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+[bans]
+multiple-versions = "deny"
+# clap_derive pulls syn 3, openssl-macros syn 2
+skip = [{ crate = "syn" }]

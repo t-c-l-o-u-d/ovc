@@ -1,6 +1,5 @@
 ---
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# See LICENSE or https://www.gnu.org/licenses/agpl.txt
 name: Release
 run-name: >-
   ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
@@ -18,51 +17,25 @@ jobs:
   release:
     name: >-
       ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Validate and Update Version
-        if: inputs.version != ''
-        run: |
-          VERSION="${{ inputs.version }}"
-          RE='^[0-9]+\.[0-9]+\.[0-9]+$'
-          if [[ ! "$VERSION" =~ $RE ]]; then
-            echo "::error::Invalid semver (e.g. 1.2.0)"
-            exit 1
-          fi
-          CARGO_VERSION=$( \
-            grep '^version' Cargo.toml \
-            | head -1 \
-            | sed 's/.*"\(.*\)".*/\1/')
-          if [[ "$VERSION" != "$CARGO_VERSION" ]]; then
-            echo "Updating version" \
-              "$CARGO_VERSION -> $VERSION"
-            sed -i \
-              "s/^version = \"$CARGO_VERSION\"/version = \"$VERSION\"/" \
-              Cargo.toml
-          fi
-      - name: Sync Cargo.lock
-        if: inputs.version != ''
-        run: cargo generate-lockfile
-      - name: Commit Version Update
-        if: inputs.version != ''
-        run: |
-          git diff --quiet Cargo.toml || {
-            git config user.name \
-              "github-actions[bot]"
-            git config user.email \
-              "github-actions[bot]@users.noreply.github.com"
-            git add Cargo.toml Cargo.lock
-            CARGO_VERSION=$( \
-              grep '^version' Cargo.toml \
-              | head -1 \
-              | sed 's/.*"\(.*\)".*/\1/')
-            git commit -m \
-              "Bump version to $CARGO_VERSION [skip ci]"
-            git push
-          }
-      - name: Build Release Binary
-        run: bash .github/scripts/build.bash linux-x86_64
+      - name: Setup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/ci-setup.bash
+      - name: Lint
+        run: bash .github/scripts/lint.bash
+      - name: Version
+        if: inputs.version
+        run: bash .github/scripts/version.bash "${{ inputs.version }}"
+      - name: Build
+        run: bash .github/scripts/build.bash
+      - name: Release
+        if: inputs.version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/release.bash "${{ inputs.version }}"
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -73,14 +46,3 @@ jobs:
         with:
           name: ovc-linux-x86_64.sha256
           path: ovc-linux-x86_64.sha256
-      - name: Create Release
-        if: inputs.version != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |-
-          gh release create \
-            "v${{ inputs.version }}" \
-            --title "v${{ inputs.version }}" \
-            --generate-notes \
-            ovc-linux-x86_64 \
-            ovc-linux-x86_64.sha256
