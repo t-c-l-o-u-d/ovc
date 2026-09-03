@@ -3,17 +3,11 @@
 
 set -o errexit -o nounset -o pipefail
 
-echo -e "\n[cargo-audit]"
-cargo audit --deny warnings --deny unmaintained --deny unsound --deny yanked --quiet
-
-echo -e "\n[cargo-check-debug]"
-cargo check --all-features --quiet
-
-echo -e "\n[cargo-check-release]"
-cargo check --all-features --release --quiet
+echo -e "\n[cargo-check]"
+cargo check --all-features --locked --quiet
 
 echo -e "\n[cargo-clippy]"
-cargo clippy --all-features --quiet -- \
+cargo clippy --all-features --locked --quiet -- \
   --deny warnings \
   --deny clippy::all \
   --deny clippy::correctness \
@@ -27,13 +21,13 @@ cargo clippy --all-features --quiet -- \
   --allow clippy::multiple_crate_versions
 
 echo -e "\n[cargo-deny]"
-cargo deny check advisories bans sources
+cargo deny check advisories bans licenses sources
 
 echo -e "\n[cargo-fmt]"
 cargo fmt -- --check --files-with-diff
 
 echo -e "\n[cargo-test]"
-cargo test --release --quiet
+cargo test --release --locked --quiet
 
 echo -e "\n[rumdl]"
 rumdl check .

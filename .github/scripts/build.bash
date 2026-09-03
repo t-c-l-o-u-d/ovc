@@ -6,7 +6,7 @@ set -o errexit -o nounset -o pipefail
 ARCH="${1:-linux-x86_64}"
 
 echo -e "\n[cargo-build]"
-cargo build --release
+cargo build --release --locked
 
 echo -e "\n[strip]"
 strip target/release/ovc

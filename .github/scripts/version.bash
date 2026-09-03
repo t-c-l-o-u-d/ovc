@@ -13,11 +13,17 @@ if [[ ! "${VERSION}" =~ ${SEMVER} ]]; then
 fi
 echo "${VERSION}"
 
+echo -e "\n[tag]"
+if git ls-remote --tags origin "refs/tags/v${VERSION}" | grep --quiet .; then
+  echo "::error::Tag v${VERSION} already exists"
+  exit 1
+fi
+
 echo -e "\n[version]"
 sed --in-place "s/^version = .*/version = \"${VERSION}\"/" Cargo.toml
 
 echo -e "\n[lockfile]"
-cargo generate-lockfile
+cargo update --workspace
 
 echo -e "\n[commit]"
 if git diff --quiet Cargo.toml; then

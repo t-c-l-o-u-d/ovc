@@ -13,6 +13,9 @@ run-name: >-
         type: string
 permissions:
   contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
     name: >-
@@ -28,14 +31,17 @@ jobs:
         run: bash .github/scripts/lint.bash
       - name: Version
         if: inputs.version
-        run: bash .github/scripts/version.bash "${{ inputs.version }}"
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash .github/scripts/version.bash "${VERSION}"
       - name: Build
         run: bash .github/scripts/build.bash
       - name: Release
         if: inputs.version
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/release.bash "${{ inputs.version }}"
+          VERSION: ${{ inputs.version }}
+        run: bash .github/scripts/release.bash "${VERSION}"
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
