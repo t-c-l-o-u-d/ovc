@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+---
+extends: default
+rules:
+  document-start:
+    present: true
+  line-length:
+    max: 120
+  truthy:
+    allowed-values:
+      - 'true'
+      - 'false'
+      - 'on'
+  comments:
+    min-spaces-from-content: 1
