@@ -61,4 +61,26 @@ tar --extract --file /tmp/yamlfmt.tar.gz --directory /tmp yamlfmt
 install --mode=755 /tmp/yamlfmt "${BIN_DIR}/yamlfmt"
 
 echo -e "\n[yamllint]"
-PIPX_BIN_DIR="${BIN_DIR}" pipx install --force "yamllint==${YAMLLINT_VERSION}"
+PIPX_HOME="${HOME}/.pipx" PIPX_BIN_DIR="${BIN_DIR}" pipx install --force "yamllint==${YAMLLINT_VERSION}"
+
+echo -e "\n[verify]"
+for pair in \
+  "cargo-audit=${CARGO_AUDIT_VERSION}" \
+  "cargo-deny=${CARGO_DENY_VERSION}" \
+  "rumdl=${RUMDL_VERSION}" \
+  "shellcheck=${SHELLCHECK_VERSION}" \
+  "shfmt=${SHFMT_VERSION}" \
+  "yamlfmt=${YAMLFMT_VERSION}" \
+  "yamllint=${YAMLLINT_VERSION}"; do
+  tool="${pair%%=*}"
+  want="${pair#*=}"
+  if ! got="$("${BIN_DIR}/${tool}" --version 2>&1)"; then
+    echo "${tool} failed to report a version"
+    exit 1
+  fi
+  if [[ "${got}" != *"${want}"* ]]; then
+    echo "${tool}: want ${want}, got ${got}"
+    exit 1
+  fi
+  echo "${tool} ${want}"
+done
