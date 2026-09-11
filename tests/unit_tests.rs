@@ -1746,3 +1746,58 @@ mod manpage_integration_tests {
         );
     }
 }
+
+// =============================================================================
+// XDG base directory tests
+// =============================================================================
+
+mod xdg_unit_tests {
+    use super::*;
+    use ovc::xdg;
+
+    #[test]
+    fn base_dir_uses_variable() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let cache_home = temp_dir.path().join("cache");
+
+        // SAFETY: single thread, no concurrent env access
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_home) };
+        let dir = xdg::base_dir("XDG_CACHE_HOME", ".cache").unwrap();
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+        assert_eq!(dir, cache_home);
+    }
+
+    #[test]
+    fn empty_variable_falls_back() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+
+        // SAFETY: single thread, no concurrent env access
+        unsafe { std::env::set_var("XDG_CACHE_HOME", "") };
+        let saved_home = std::env::var("HOME").unwrap();
+        unsafe { std::env::set_var("HOME", home) };
+        let dir = xdg::base_dir("XDG_CACHE_HOME", ".cache").unwrap();
+        unsafe { std::env::set_var("HOME", saved_home) };
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+        assert_eq!(dir, home.join(".cache"));
+        assert!(
+            dir.is_absolute(),
+            "Empty variable must not yield a relative path"
+        );
+    }
+
+    #[test]
+    fn empty_home_is_rejected() {
+        // SAFETY: single thread, no concurrent env access
+        unsafe { std::env::set_var("XDG_CACHE_HOME", "") };
+        let saved_home = std::env::var("HOME").unwrap();
+        unsafe { std::env::set_var("HOME", "") };
+        let result = xdg::base_dir("XDG_CACHE_HOME", ".cache");
+        unsafe { std::env::set_var("HOME", saved_home) };
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+        assert!(result.is_err(), "Empty HOME should be an error");
+    }
+}

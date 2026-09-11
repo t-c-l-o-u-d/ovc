@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Platform, compare_versions};
+use crate::{Platform, compare_versions, xdg};
 
 /// Cache lifetime in seconds.
 const CACHE_TTL_SECS: u64 = 72 * 60 * 60;
@@ -108,9 +108,7 @@ impl VersionCache {
 /// # Errors
 /// Fails when HOME is unset or the directory cannot be created.
 pub fn get_cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let cache_base = std::env::var("XDG_CACHE_HOME")
-        .or_else(|_| std::env::var("HOME").map(|home| format!("{home}/.cache")))?;
-    let cache_dir = PathBuf::from(cache_base).join("ovc");
+    let cache_dir = xdg::base_dir("XDG_CACHE_HOME", ".cache")?.join("ovc");
     fs::create_dir_all(&cache_dir)?;
     Ok(cache_dir)
 }
@@ -291,38 +289,6 @@ pub fn format_cache_age(timestamp: u64) -> String {
     } else {
         format!("{seconds}s ago")
     }
-}
-
-/// Check a version against the cache, optionally refreshing it.
-///
-/// Returns `None` when no usable cache exists.
-///
-/// # Errors
-/// Fails when the cache cannot be loaded or refreshed.
-pub fn version_exists_in_cache(
-    version: &str,
-    platform: &Platform,
-    update_if_missing: bool,
-    verbose: bool,
-) -> Result<Option<bool>, Box<dyn Error>> {
-    let Some(cache) = load_cached_versions(verbose) else {
-        return Ok(None);
-    };
-
-    let exists = cache.get_download_url(version, platform.name).is_some();
-    if exists || !update_if_missing {
-        return Ok(Some(exists));
-    }
-
-    if refresh_missing_version(version, verbose)?
-        && let Some(refreshed) = load_cached_versions(verbose)
-    {
-        return Ok(Some(
-            refreshed.get_download_url(version, platform.name).is_some(),
-        ));
-    }
-
-    Ok(Some(false))
 }
 
 /// Get available versions, preferring a fresh cache over the mirror.

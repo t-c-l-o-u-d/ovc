@@ -5,6 +5,7 @@ pub mod cache;
 pub mod manpage;
 pub mod platform;
 pub mod version;
+pub mod xdg;
 
 pub use platform::{OC_BIN_DIR, OC_MIRROR_BASE, Platform};
 pub use version::{compare_versions, find_matching_version, matches_version_pattern};

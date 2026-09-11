@@ -10,9 +10,7 @@ const MAN_PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/ovc.1"));
 
 /// Resolve the base data directory.
 fn data_base() -> Result<PathBuf, Box<dyn Error>> {
-    let base = std::env::var("XDG_DATA_HOME")
-        .or_else(|_| std::env::var("HOME").map(|home| format!("{home}/.local/share")))?;
-    Ok(PathBuf::from(base))
+    crate::xdg::base_dir("XDG_DATA_HOME", ".local/share")
 }
 
 /// Get the ovc data directory, creating it when absent.

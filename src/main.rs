@@ -14,12 +14,12 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 mod cli;
-use cli::{Cli, CompletionShell, StandaloneAction};
+use cli::{Cli, CompletionShell};
 
 mod update;
 
 use ovc::cache::{
-    available_versions, load_cached_versions, refresh_missing_version, version_exists_in_cache,
+    available_versions, fetch_and_cache_versions, load_cached_versions, refresh_missing_version,
 };
 use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, matches_version_pattern};
 
@@ -57,23 +57,20 @@ fn main() {
         exit(1);
     }
 
-    let standalone = cli.standalone_action();
     let verbose = cli.output.verbose;
     let insecure = cli.output.insecure;
 
     update::try_auto_update(verbose);
 
-    // conflicts_with_all enforces exclusivity at parse time
+    // The action group enforces exclusivity
     let result = if let Some(version_pattern) = cli.list {
         cmd_list_available(&version_pattern, verbose)
     } else if let Some(version_pattern) = cli.installed {
         cmd_list_installed(&version_pattern, verbose)
     } else if cli.actions.prune {
         cmd_prune(verbose)
-    } else if let Some(action) = standalone {
-        match action {
-            StandaloneAction::MatchServer => cmd_match_server(verbose, insecure),
-        }
+    } else if cli.actions.match_server {
+        cmd_match_server(verbose, insecure)
     } else {
         match cli.target_version {
             Some(version) => cmd_download(&version, verbose),
@@ -81,18 +78,28 @@ fn main() {
         }
     };
 
-    if let Err(e) = result {
-        eprintln!("{e}");
-        exit(1);
+    match result {
+        Ok(Outcome::Done) => {}
+        Ok(Outcome::NoMatch) => exit(1),
+        Err(e) => {
+            eprintln!("{e}");
+            exit(1);
+        }
     }
+}
+
+/// Whether a command produced any output.
+enum Outcome {
+    Done,
+    NoMatch,
 }
 
 // =============================================================================
 // Command Implementation Functions
 // =============================================================================
 
-/// Download a version, then set it as the default.
-fn cmd_download(version: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
+/// Fail when an unmanaged `oc` binary sits on `PATH`.
+fn reject_path_oc() -> Result<(), Box<dyn Error>> {
     if let Some(existing) = find_path_oc() {
         return Err(format!(
             "Remove the existing oc binary in ${{PATH}}: {}",
@@ -100,6 +107,12 @@ fn cmd_download(version: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
         )
         .into());
     }
+    Ok(())
+}
+
+/// Download a version, then set it as the default.
+fn cmd_download(version: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>> {
+    reject_path_oc()?;
 
     let platform = Platform::detect();
     let resolved = resolve_version(version)?;
@@ -126,11 +139,11 @@ fn cmd_download(version: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
         check_path_warnings(verbose);
     }
 
-    Ok(())
+    Ok(Outcome::Done)
 }
 
 /// Print installed versions matching a pattern.
-fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     require_major_minor(version_pattern)?;
 
     let matching: Vec<String> = list_installed_versions()?
@@ -142,7 +155,7 @@ fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
         if verbose {
             eprintln!("No installed versions found matching {version_pattern}");
         }
-        exit(1);
+        return Ok(Outcome::NoMatch);
     }
 
     let bin_dir = get_bin_dir(&Platform::detect())?;
@@ -156,11 +169,11 @@ fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
             println!("{version}");
         }
     }
-    Ok(())
+    Ok(Outcome::Done)
 }
 
 /// Print mirror versions matching a pattern.
-fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     require_major_minor(version_pattern)?;
 
     let matching: Vec<String> = available_versions(verbose)?
@@ -172,17 +185,17 @@ fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
         if verbose {
             eprintln!("No versions found matching {version_pattern}");
         }
-        exit(1);
+        return Ok(Outcome::NoMatch);
     }
 
     for version in matching {
         println!("{version}");
     }
-    Ok(())
+    Ok(Outcome::Done)
 }
 
 /// Remove every installed version except the active one.
-fn cmd_prune(verbose: bool) -> Result<(), Box<dyn Error>> {
+fn cmd_prune(verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     let installed = list_installed_versions()?;
 
     if installed.is_empty() {
@@ -214,18 +227,12 @@ fn cmd_prune(verbose: bool) -> Result<(), Box<dyn Error>> {
         eprintln!("Removed {removed} version(s)");
     }
 
-    Ok(())
+    Ok(Outcome::Done)
 }
 
 /// Install the `oc` binary served by the connected cluster.
-fn cmd_match_server(verbose: bool, insecure: bool) -> Result<(), Box<dyn Error>> {
-    if let Some(existing) = find_path_oc() {
-        return Err(format!(
-            "Remove the existing oc binary in ${{PATH}}: {}",
-            existing.display()
-        )
-        .into());
-    }
+fn cmd_match_server(verbose: bool, insecure: bool) -> Result<Outcome, Box<dyn Error>> {
+    reject_path_oc()?;
 
     let download_url = get_cluster_url(verbose)?;
 
@@ -253,7 +260,7 @@ fn cmd_match_server(verbose: bool, insecure: bool) -> Result<(), Box<dyn Error>>
         check_path_warnings(verbose);
     }
 
-    Ok(())
+    Ok(Outcome::Done)
 }
 
 /// Build the cluster download URL from its console URL.
@@ -383,14 +390,16 @@ fn resolve_version(input_version: &str) -> Result<String, Box<dyn Error>> {
         return Ok(input_version.to_string());
     }
 
+    // A fetched list is already current
+    let cached = load_cached_versions(false).is_some();
     let versions = available_versions(false)?;
+
     if let Some(latest) = find_matching_version(input_version, &versions) {
         return Ok(latest);
     }
 
-    // Retry once against a freshly fetched list
-    if refresh_missing_version(input_version, false)? {
-        let versions = available_versions(false)?;
+    if cached {
+        let versions = fetch_and_cache_versions(false)?;
         if let Some(latest) = find_matching_version(input_version, &versions) {
             return Ok(latest);
         }
@@ -415,25 +424,55 @@ fn ensure_oc_binary(
         return Ok((oc_path, false));
     }
 
-    let exists = match version_exists_in_cache(version, platform, true, verbose)? {
-        Some(exists) => exists,
-        None => version_exists_on_mirror(version, platform, verbose)?,
-    };
-
-    if !exists {
-        return Err(format!("Version '{}' not found for {}", version, platform.name).into());
-    }
-
-    // Prefer the cached URL over rebuilding it
-    let download_url = load_cached_versions(verbose)
-        .and_then(|cache| cache.get_download_url(version, platform.name))
-        .unwrap_or_else(|| platform.build_download_url(version));
+    let download_url = find_download_url(version, platform, verbose)?;
 
     if verbose {
         eprintln!("Downloading from: {download_url}");
     }
     download_and_extract(&oc_path, &download_url)?;
     Ok((oc_path, true))
+}
+
+/// Find the download URL in the cache, else the mirror.
+fn find_download_url(
+    version: &str,
+    platform: &Platform,
+    verbose: bool,
+) -> Result<String, Box<dyn Error>> {
+    let Some(cache) = load_cached_versions(verbose) else {
+        // No cache, so ask the mirror
+        let url = platform.build_download_url(version);
+        return if url_exists(&url)? {
+            Ok(url)
+        } else {
+            Err(version_missing(version, platform))
+        };
+    };
+
+    if let Some(url) = cache.get_download_url(version, platform.name) {
+        return Ok(url);
+    }
+
+    // The cache may predate the version
+    if refresh_missing_version(version, verbose)?
+        && let Some(url) =
+            load_cached_versions(verbose).and_then(|c| c.get_download_url(version, platform.name))
+    {
+        return Ok(url);
+    }
+
+    Err(version_missing(version, platform))
+}
+
+/// Check whether the mirror serves a URL.
+fn url_exists(url: &str) -> Result<bool, Box<dyn Error>> {
+    let resp = reqwest::blocking::Client::new().head(url).send()?;
+    Ok(resp.status().is_success())
+}
+
+/// Build the error for a version the mirror lacks.
+fn version_missing(version: &str, platform: &Platform) -> Box<dyn Error> {
+    format!("Version '{}' not found for {}", version, platform.name).into()
 }
 
 /// Get the binary directory, creating it when absent.
@@ -501,20 +540,6 @@ fn active_oc_version() -> Option<String> {
     let target = fs::read_link(&symlink).ok()?;
     let fname = target.file_name()?.to_str()?;
     fname.strip_prefix("oc-").map(String::from)
-}
-
-/// Check whether the mirror serves this version.
-fn version_exists_on_mirror(
-    version: &str,
-    platform: &Platform,
-    verbose: bool,
-) -> Result<bool, Box<dyn Error>> {
-    let url = load_cached_versions(verbose)
-        .and_then(|cache| cache.get_download_url(version, platform.name))
-        .unwrap_or_else(|| platform.build_download_url(version));
-
-    let resp = reqwest::blocking::Client::new().head(&url).send()?;
-    Ok(resp.status().is_success())
 }
 
 /// Point the `oc` and `kubectl` symlinks at a version.

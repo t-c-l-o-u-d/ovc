@@ -7,6 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use reqwest::blocking::Client;
 use sha2::{Digest, Sha256};
 
 use ovc::compare_versions;
@@ -29,7 +30,7 @@ fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
     if !cooldown_elapsed() {
         return Ok(());
     }
-    // A failed stamp must not veto the update
+    // Update proceeds even if stamping fails
     if let Err(e) = record_cooldown()
         && verbose
     {
@@ -41,7 +42,8 @@ fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
         eprintln!("ovc: checking for updates (current: v{current})");
     }
 
-    let (latest, bin_url, sha_url) = get_latest_github_release(verbose)?;
+    let client = http_client()?;
+    let (latest, bin_url, sha_url) = get_latest_github_release(&client, verbose)?;
 
     if compare_versions(&latest, current) != std::cmp::Ordering::Greater {
         if verbose {
@@ -56,8 +58,8 @@ fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
 
     let exe = std::env::current_exe()?;
     let tmp = exe.with_extension("update");
-    download_file(&bin_url, &tmp)?;
-    verify_sha256(&sha_url, &tmp, verbose)?;
+    download_file(&client, &bin_url, &tmp)?;
+    verify_sha256(&client, &sha_url, &tmp, verbose)?;
     replace_binary(&tmp, &exe, verbose)?;
 
     if verbose {
@@ -66,18 +68,24 @@ fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Build an HTTP client identifying this ovc version.
+fn http_client() -> Result<Client, reqwest::Error> {
+    Client::builder()
+        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+}
+
 /// Get the latest release version, binary URL, and checksum URL.
-fn get_latest_github_release(verbose: bool) -> Result<(String, String, String), Box<dyn Error>> {
+fn get_latest_github_release(
+    client: &Client,
+    verbose: bool,
+) -> Result<(String, String, String), Box<dyn Error>> {
     let api_url =
         format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest");
 
     if verbose {
         eprintln!("ovc: fetching release info from {api_url}");
     }
-
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
-        .build()?;
 
     let resp = client.get(&api_url).send()?;
 
@@ -119,12 +127,8 @@ fn get_latest_github_release(verbose: bool) -> Result<(String, String, String), 
 }
 
 /// Download a URL to a path and mark it executable.
-fn download_file(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
+fn download_file(client: &Client, url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
     use std::os::unix::fs::PermissionsExt;
-
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
-        .build()?;
 
     let resp = client.get(url).send()?;
 
@@ -140,11 +144,12 @@ fn download_file(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 /// Check the download against its published checksum.
-fn verify_sha256(sha_url: &str, bin_path: &Path, verbose: bool) -> Result<(), Box<dyn Error>> {
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
-        .build()?;
-
+fn verify_sha256(
+    client: &Client,
+    sha_url: &str,
+    bin_path: &Path,
+    verbose: bool,
+) -> Result<(), Box<dyn Error>> {
     let resp = client.get(sha_url).send()?;
 
     if !resp.status().is_success() {
@@ -244,15 +249,6 @@ pub fn record_cooldown() -> io::Result<()> {
 }
 
 pub fn cooldown_path() -> Option<PathBuf> {
-    let cache = std::env::var("XDG_CACHE_HOME")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var("HOME")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .map(|h| PathBuf::from(h).join(".cache"))
-        })?;
+    let cache = ovc::xdg::base_dir("XDG_CACHE_HOME", ".cache").ok()?;
     Some(cache.join("ovc").join("last-update-check"))
 }

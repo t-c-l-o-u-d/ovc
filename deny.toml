@@ -17,5 +17,4 @@ allow = [
 
 [bans]
 multiple-versions = "deny"
-# clap_derive pulls syn 3, url pulls 2
 skip = [{ crate = "syn" }]

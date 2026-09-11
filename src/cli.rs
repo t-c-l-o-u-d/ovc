@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Included by build.rs for the man page
 
-use clap::{Args, Parser, ValueEnum};
-
-/// Standalone actions that need no version argument.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum StandaloneAction {
-    MatchServer,
-}
+use clap::{ArgGroup, Args, Parser, ValueEnum};
 
 /// Shells with completion support.
 #[derive(Clone, Copy, ValueEnum)]
@@ -19,20 +13,20 @@ pub enum CompletionShell {
 #[derive(Args)]
 pub struct ActionFlags {
     /// Remove inactive versions
-    #[arg(short = 'p', long = "prune", conflicts_with_all = ["target_version", "list", "installed", "match_server"])]
+    #[arg(short = 'p', long = "prune")]
     pub prune: bool,
 
     /// Download the version matching the currently connected cluster
-    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["target_version", "list", "installed", "prune"])]
+    #[arg(short = 'm', long = "match-server")]
     pub match_server: bool,
 }
 
 /// Output and connection options.
 #[derive(Args)]
 pub struct OutputFlags {
-    /// Allow insecure TLS connections (skip certificate verification)
+    /// Allow insecure TLS connections (requires --match-server)
     // checked in main so meta flags win
-    #[arg(short = 'k', long = "insecure", conflicts_with_all = ["target_version", "list", "installed", "prune"])]
+    #[arg(short = 'k', long = "insecure")]
     pub insecure: bool,
 
     /// Show detailed output
@@ -48,7 +42,10 @@ pub struct OutputFlags {
     version,
     about = "OpenShift Client Version Control",
     disable_version_flag = true,
-    override_usage = "ovc [OPTIONS] [VERSION]"
+    override_usage = "ovc [OPTIONS] [VERSION]",
+    group = ArgGroup::new("action")
+        .multiple(false)
+        .args(["target_version", "list", "installed", "prune", "match_server"])
 )]
 pub struct Cli {
     /// Print version
@@ -56,15 +53,15 @@ pub struct Cli {
     pub version: bool,
 
     /// Version to download
-    #[arg(value_name = "VERSION", conflicts_with_all = ["list", "installed", "prune", "match_server"])]
+    #[arg(value_name = "VERSION")]
     pub target_version: Option<String>,
 
     /// List available versions from the mirror
-    #[arg(short = 'l', long = "list", value_name = "VERSION", conflicts_with_all = ["target_version", "installed", "prune", "match_server"])]
+    #[arg(short = 'l', long = "list", value_name = "VERSION")]
     pub list: Option<String>,
 
     /// List installed versions
-    #[arg(short = 'i', long = "installed", value_name = "VERSION", conflicts_with_all = ["target_version", "list", "prune", "match_server"])]
+    #[arg(short = 'i', long = "installed", value_name = "VERSION")]
     pub installed: Option<String>,
 
     #[command(flatten)]
@@ -76,16 +73,4 @@ pub struct Cli {
     /// Generate shell completion script
     #[arg(long = "completion", value_name = "SHELL", value_enum)]
     pub completion: Option<CompletionShell>,
-}
-
-impl Cli {
-    /// Return the requested standalone action, if any.
-    #[must_use]
-    pub fn standalone_action(&self) -> Option<StandaloneAction> {
-        if self.actions.match_server {
-            Some(StandaloneAction::MatchServer)
-        } else {
-            None
-        }
-    }
 }
