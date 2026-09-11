@@ -108,7 +108,7 @@ impl VersionCache {
 /// # Errors
 /// Fails when HOME is unset or the directory cannot be created.
 pub fn get_cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let cache_dir = xdg::base_dir("XDG_CACHE_HOME", ".cache")?.join("ovc");
+    let cache_dir = xdg::cache_root()?;
     fs::create_dir_all(&cache_dir)?;
     Ok(cache_dir)
 }

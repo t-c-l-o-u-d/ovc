@@ -249,6 +249,5 @@ pub fn record_cooldown() -> io::Result<()> {
 }
 
 pub fn cooldown_path() -> Option<PathBuf> {
-    let cache = ovc::xdg::base_dir("XDG_CACHE_HOME", ".cache").ok()?;
-    Some(cache.join("ovc").join("last-update-check"))
+    Some(ovc::xdg::cache_root().ok()?.join("last-update-check"))
 }

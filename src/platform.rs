@@ -4,9 +4,6 @@
 /// Base URL of the OpenShift mirror hosting client binaries.
 pub const OC_MIRROR_BASE: &str = "https://mirror.openshift.com/pub/openshift-v4";
 
-/// Directory holding downloaded `oc` binaries, relative to home.
-pub const OC_BIN_DIR: &str = ".local/bin/oc_bins";
-
 /// Target platform for an OpenShift client binary.
 #[derive(Debug, Clone)]
 pub struct Platform {

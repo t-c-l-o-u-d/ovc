@@ -21,7 +21,8 @@ mod update;
 use ovc::cache::{
     available_versions, fetch_and_cache_versions, load_cached_versions, refresh_missing_version,
 };
-use ovc::{OC_BIN_DIR, Platform, compare_versions, find_matching_version, matches_version_pattern};
+use ovc::xdg::warn_cache_fallback;
+use ovc::{Platform, compare_versions, find_matching_version, matches_version_pattern};
 
 /// Parse arguments and dispatch to a command handler.
 fn main() {
@@ -113,6 +114,7 @@ fn reject_path_oc() -> Result<(), Box<dyn Error>> {
 /// Download a version, then set it as the default.
 fn cmd_download(version: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     reject_path_oc()?;
+    warn_cache_fallback(verbose);
 
     let platform = Platform::detect();
     let resolved = resolve_version(version)?;
@@ -145,6 +147,7 @@ fn cmd_download(version: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>>
 /// Print installed versions matching a pattern.
 fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     require_major_minor(version_pattern)?;
+    warn_cache_fallback(verbose);
 
     let matching: Vec<String> = list_installed_versions()?
         .into_iter()
@@ -158,7 +161,7 @@ fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<Outcome, B
         return Ok(Outcome::NoMatch);
     }
 
-    let bin_dir = get_bin_dir(&Platform::detect())?;
+    let bin_dir = get_bin_dir()?;
     for version in matching {
         if verbose {
             println!(
@@ -175,6 +178,7 @@ fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<Outcome, B
 /// Print mirror versions matching a pattern.
 fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     require_major_minor(version_pattern)?;
+    warn_cache_fallback(verbose);
 
     let matching: Vec<String> = available_versions(verbose)?
         .into_iter()
@@ -196,6 +200,7 @@ fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<Outcome, B
 
 /// Remove every installed version except the active one.
 fn cmd_prune(verbose: bool) -> Result<Outcome, Box<dyn Error>> {
+    warn_cache_fallback(verbose);
     let installed = list_installed_versions()?;
 
     if installed.is_empty() {
@@ -203,7 +208,7 @@ fn cmd_prune(verbose: bool) -> Result<Outcome, Box<dyn Error>> {
     }
 
     let active = active_oc_version();
-    let bin_dir = get_bin_dir(&Platform::detect())?;
+    let bin_dir = get_bin_dir()?;
     let mut removed = 0;
 
     for version in &installed {
@@ -233,6 +238,7 @@ fn cmd_prune(verbose: bool) -> Result<Outcome, Box<dyn Error>> {
 /// Install the `oc` binary served by the connected cluster.
 fn cmd_match_server(verbose: bool, insecure: bool) -> Result<Outcome, Box<dyn Error>> {
     reject_path_oc()?;
+    warn_cache_fallback(verbose);
 
     let download_url = get_cluster_url(verbose)?;
 
@@ -241,7 +247,7 @@ fn cmd_match_server(verbose: bool, insecure: bool) -> Result<Outcome, Box<dyn Er
     }
 
     let platform = Platform::detect();
-    let bin_dir = get_bin_dir(&platform)?;
+    let bin_dir = get_bin_dir()?;
     let temp_path = bin_dir.join("oc-cluster-temp");
 
     download_from_cluster(&download_url, &temp_path, insecure, verbose)?;
@@ -418,7 +424,7 @@ fn ensure_oc_binary(
     platform: &Platform,
     verbose: bool,
 ) -> Result<(PathBuf, bool), Box<dyn Error>> {
-    let oc_path = get_bin_dir(platform)?.join(format!("oc-{version}"));
+    let oc_path = get_bin_dir()?.join(format!("oc-{version}"));
 
     if oc_path.exists() {
         return Ok((oc_path, false));
@@ -476,9 +482,8 @@ fn version_missing(version: &str, platform: &Platform) -> Box<dyn Error> {
 }
 
 /// Get the binary directory, creating it when absent.
-fn get_bin_dir(platform: &Platform) -> Result<PathBuf, Box<dyn Error>> {
-    let home = std::env::var("HOME")?;
-    let bin_dir = PathBuf::from(&home).join(OC_BIN_DIR).join(platform.name);
+fn get_bin_dir() -> Result<PathBuf, Box<dyn Error>> {
+    let bin_dir = ovc::xdg::cache_root()?.join("oc");
     fs::create_dir_all(&bin_dir)?;
     Ok(bin_dir)
 }
@@ -516,7 +521,7 @@ fn set_executable(path: &Path) -> Result<(), Box<dyn Error>> {
 
 /// List installed versions, sorted by semantic version.
 fn list_installed_versions() -> Result<Vec<String>, Box<dyn Error>> {
-    let bin_dir = get_bin_dir(&Platform::detect())?;
+    let bin_dir = get_bin_dir()?;
     let mut versions = vec![];
 
     if bin_dir.exists() {
@@ -544,7 +549,7 @@ fn active_oc_version() -> Option<String> {
 
 /// Point the `oc` and `kubectl` symlinks at a version.
 fn set_default_oc(version: &str, platform: &Platform) -> Result<(), Box<dyn Error>> {
-    let oc_path = get_bin_dir(platform)?.join(format!("oc-{version}"));
+    let oc_path = get_bin_dir()?.join(format!("oc-{version}"));
 
     if !oc_path.exists() {
         ensure_oc_binary(version, platform, false)?;

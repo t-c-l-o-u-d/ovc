@@ -47,6 +47,16 @@ fn run_ovc(args: &[&str]) -> std::process::Output {
         .expect("Failed to execute ovc command")
 }
 
+/// Cache root to pass as `XDG_CACHE_HOME` for a test HOME.
+fn cache_home(home: &std::path::Path) -> PathBuf {
+    home.join("cache")
+}
+
+/// Directory holding `oc` binaries under a test HOME.
+fn oc_dir(home: &std::path::Path) -> PathBuf {
+    cache_home(home).join("ovc/oc")
+}
+
 /// Build a PATH with any `oc`-containing directory removed.
 fn path_without_oc() -> String {
     let path = std::env::var("PATH").unwrap_or_default();
@@ -1018,6 +1028,7 @@ mod cli_installed_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--installed", "4.19"])
             .env("HOME", home_dir)
+            .env("XDG_CACHE_HOME", cache_home(home_dir))
             .output()
             .expect("Failed to execute ovc command");
 
@@ -1050,6 +1061,7 @@ mod cli_prune_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--prune"])
             .env("HOME", temp_dir.path())
+            .env("XDG_CACHE_HOME", cache_home(temp_dir.path()))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1072,6 +1084,7 @@ mod cli_match_server_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--match-server"])
             .env("HOME", home_dir)
+            .env("XDG_CACHE_HOME", cache_home(home_dir))
             .env("KUBECONFIG", home_dir.join("nonexistent"))
             .env("PATH", path_without_oc())
             .output()
@@ -1350,7 +1363,7 @@ mod cli_prune_isolated_tests {
     use super::*;
 
     fn create_fake_binaries(home: &std::path::Path, versions: &[&str]) {
-        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        let bin_dir = oc_dir(home);
         fs::create_dir_all(&bin_dir).unwrap();
         for v in versions {
             fs::write(bin_dir.join(format!("oc-{v}")), "fake").unwrap();
@@ -1360,8 +1373,7 @@ mod cli_prune_isolated_tests {
     fn set_active_version(home: &std::path::Path, version: &str) {
         let local_bin = home.join(".local/bin");
         fs::create_dir_all(&local_bin).unwrap();
-        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
-        let target = bin_dir.join(format!("oc-{version}"));
+        let target = oc_dir(home).join(format!("oc-{version}"));
         let link = local_bin.join("oc");
         let _ = fs::remove_file(&link);
         std::os::unix::fs::symlink(&target, &link).unwrap();
@@ -1377,6 +1389,7 @@ mod cli_prune_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--prune"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1387,7 +1400,7 @@ mod cli_prune_isolated_tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        let bin_dir = oc_dir(home);
         assert!(
             !bin_dir.join("oc-4.19.0").exists(),
             "4.19.0 should be removed"
@@ -1411,6 +1424,7 @@ mod cli_prune_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "-v", "--prune"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1429,6 +1443,7 @@ mod cli_prune_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--prune"])
             .env("HOME", temp_dir.path())
+            .env("XDG_CACHE_HOME", cache_home(temp_dir.path()))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1448,7 +1463,7 @@ mod cli_installed_isolated_tests {
     use super::*;
 
     fn create_fake_binaries(home: &std::path::Path, versions: &[&str]) {
-        let bin_dir = home.join(".local/bin/oc_bins/linux-x86_64");
+        let bin_dir = oc_dir(home);
         fs::create_dir_all(&bin_dir).unwrap();
         for v in versions {
             fs::write(bin_dir.join(format!("oc-{v}")), "fake").unwrap();
@@ -1464,6 +1479,7 @@ mod cli_installed_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--installed", "4.19"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1488,6 +1504,7 @@ mod cli_installed_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "-v", "--installed", "4.19"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1495,7 +1512,7 @@ mod cli_installed_isolated_tests {
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.contains('(') && stdout.contains(')'));
-        assert!(stdout.contains("oc_bins"));
+        assert!(stdout.contains("ovc/oc"));
     }
 
     #[test]
@@ -1507,6 +1524,7 @@ mod cli_installed_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "-v", "--installed", "999.999"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1525,6 +1543,7 @@ mod cli_installed_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--installed", "4.1"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1559,6 +1578,7 @@ mod cli_installed_isolated_tests {
         let output = Command::new("cargo")
             .args(["run", "--", "--installed", "4.19"])
             .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
             .env("PATH", path_without_oc())
             .output()
             .expect("Failed to execute ovc command");
@@ -1571,6 +1591,63 @@ mod cli_installed_isolated_tests {
             vec!["4.19.1", "4.19.2", "4.19.3", "4.19.10"],
             "Versions should be sorted semantically"
         );
+    }
+
+    fn run_without_xdg(home: &std::path::Path, args: &[&str]) -> std::process::Output {
+        let bin_dir = home.join(".ovc/oc");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::write(bin_dir.join("oc-4.19.0"), "fake").unwrap();
+
+        Command::new("cargo")
+            .args(["run", "--"])
+            .args(args)
+            .env("HOME", home)
+            .env_remove("XDG_CACHE_HOME")
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command")
+    }
+
+    #[test]
+    fn fallback_warns_when_verbose() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let output = run_without_xdg(temp_dir.path(), &["-v", "--installed", "4.19"]);
+
+        assert!(output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("XDG_CACHE_HOME unset"),
+            "Expected fallback warning, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn fallback_silent_without_verbose() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let output = run_without_xdg(temp_dir.path(), &["--installed", "4.19"]);
+
+        assert!(output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stderr.contains("XDG_CACHE_HOME unset"));
+    }
+
+    #[test]
+    fn no_warning_when_xdg_set() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.0"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "-v", "--installed", "4.19"])
+            .env("HOME", home)
+            .env("XDG_CACHE_HOME", cache_home(home))
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stderr.contains("XDG_CACHE_HOME unset"));
     }
 }
 
@@ -1795,6 +1872,52 @@ mod xdg_unit_tests {
         let saved_home = std::env::var("HOME").unwrap();
         unsafe { std::env::set_var("HOME", "") };
         let result = xdg::base_dir("XDG_CACHE_HOME", ".cache");
+        unsafe { std::env::set_var("HOME", saved_home) };
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+        assert!(result.is_err(), "Empty HOME should be an error");
+    }
+
+    #[test]
+    fn cache_root_uses_variable() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let cache_home = temp_dir.path().join("xdg");
+
+        // SAFETY: single thread, no concurrent env access
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_home) };
+        let dir = xdg::cache_root().unwrap();
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+        assert_eq!(dir, cache_home.join("ovc"));
+    }
+
+    #[test]
+    fn cache_root_falls_back_to_ovc() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+
+        // SAFETY: single thread, no concurrent env access
+        unsafe { std::env::set_var("XDG_CACHE_HOME", "") };
+        let saved_home = std::env::var("HOME").unwrap();
+        unsafe { std::env::set_var("HOME", home) };
+        let dir = xdg::cache_root().unwrap();
+        unsafe { std::env::set_var("HOME", saved_home) };
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+
+        assert_eq!(dir, home.join(".ovc"));
+        assert!(
+            dir.is_absolute(),
+            "Empty variable must not yield a relative path"
+        );
+    }
+
+    #[test]
+    fn cache_root_rejects_empty_home() {
+        // SAFETY: single thread, no concurrent env access
+        unsafe { std::env::set_var("XDG_CACHE_HOME", "") };
+        let saved_home = std::env::var("HOME").unwrap();
+        unsafe { std::env::set_var("HOME", "") };
+        let result = xdg::cache_root();
         unsafe { std::env::set_var("HOME", saved_home) };
         unsafe { std::env::remove_var("XDG_CACHE_HOME") };
 
