@@ -22,13 +22,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::{Shell, generate};
 use flate2::read::GzDecoder;
 
 use tar::Archive;
 
 mod cli;
-use cli::{Cli, StandaloneAction};
+use cli::{Cli, CompletionShell, StandaloneAction};
 
 mod update;
 
@@ -53,8 +54,13 @@ fn main() {
     let cli = Cli::parse();
 
     // Handle completion generation first (exits immediately)
-    if cli.completion.is_some() {
-        print_bash_completion();
+    if let Some(shell) = cli.completion {
+        generate(
+            completion_shell(shell),
+            &mut Cli::command(),
+            "ovc",
+            &mut io::stdout(),
+        );
         return;
     }
 
@@ -846,55 +852,9 @@ fn check_existing_oc_in_path() -> Option<PathBuf> {
     None
 }
 
-/// Print bash completion script
-fn print_bash_completion() {
-    print!(
-        r#"# bash completion for ovc
-
-_ovc_completions() {{
-    local cur prev
-    COMPREPLY=()
-    cur="${{COMP_WORDS[COMP_CWORD]}}"
-    prev="${{COMP_WORDS[COMP_CWORD-1]}}"
-
-    if [[ "${{cur}}" == -* ]]; then
-        local options=(
-            "--completion    (Generate shell completion script)"
-            "-h              (Print help)"
-            "--help          (Print help)"
-            "-i              (List installed versions)"
-            "--installed     (List installed versions)"
-            "--insecure      (Skip TLS certificate verification)"
-            "-k              (Skip TLS certificate verification)"
-            "-l              (List available versions from the mirror)"
-            "--list          (List available versions from the mirror)"
-            "-m              (Download version matching connected cluster)"
-            "--match-server  (Download version matching connected cluster)"
-            "-p              (Remove all installed versions except active)"
-            "--prune         (Remove all installed versions except active)"
-            "-v              (Make the operation more talkative)"
-            "--verbose       (Make the operation more talkative)"
-            "--version       (Print version)"
-        )
-
-        local IFS=$'\n'
-        local opt name padded
-        local width=$((COLUMNS - 1))
-        for opt in "${{options[@]}}"; do
-            name="${{opt%%  *}}"
-            if [[ "$name" == "${{cur}}"* ]]; then
-                printf -v padded "%-${{width}}s" "$opt"
-                COMPREPLY+=("$padded")
-            fi
-        done
-
-        if ((${{#COMPREPLY[@]}} == 1)); then
-            COMPREPLY[0]="${{COMPREPLY[0]%%  *}}"
-        fi
-    fi
-}}
-
-complete -o nosort -F _ovc_completions ovc
-"#
-    );
+/// Map CLI shell to generator shell
+fn completion_shell(shell: CompletionShell) -> Shell {
+    match shell {
+        CompletionShell::Bash => Shell::Bash,
+    }
 }

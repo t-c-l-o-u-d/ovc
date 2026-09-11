@@ -4,12 +4,18 @@
 // Separated from main.rs so that build.rs can include this file
 // to generate the man page via clap_mangen.
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 /// Standalone actions that don't require a version argument
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StandaloneAction {
     MatchServer,
+}
+
+/// Shells with completion support
+#[derive(Clone, Copy, ValueEnum)]
+pub enum CompletionShell {
+    Bash,
 }
 
 /// CLI argument parser - bools required for clap flag parsing
@@ -54,9 +60,9 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
-    /// Generate shell completion script (only bash is supported currently)
-    #[arg(long = "completion", value_name = "SHELL", value_parser = parse_completion_shell)]
-    pub completion: Option<String>,
+    /// Generate shell completion script
+    #[arg(long = "completion", value_name = "SHELL", value_enum)]
+    pub completion: Option<CompletionShell>,
 }
 
 impl Cli {
@@ -67,12 +73,5 @@ impl Cli {
         } else {
             None
         }
-    }
-}
-
-fn parse_completion_shell(s: &str) -> Result<String, String> {
-    match s.to_lowercase().as_str() {
-        "bash" => Ok(s.to_lowercase()),
-        _ => Err(format!("unsupported shell: {s} (only 'bash' is supported)")),
     }
 }
