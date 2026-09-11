@@ -12,7 +12,7 @@ use ovc::compare_versions;
 
 const GITHUB_OWNER: &str = "t-c-l-o-u-d";
 const GITHUB_REPO: &str = "ovc";
-const UPDATE_COOLDOWN: Duration = Duration::from_secs(24 * 3600);
+const UPDATE_COOLDOWN: Duration = Duration::from_hours(24);
 
 /// Try to auto-update ovc to the latest GitHub release. Non-fatal.
 pub fn try_auto_update(verbose: bool) {
