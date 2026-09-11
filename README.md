@@ -58,7 +58,8 @@ versions.
 - Enable bash completion
 
   ```bash
-  source <(ovc --completion bash)
+  mkdir --parents ~/.local/share/bash-completion/completions &&\
+  ovc --completion bash > ~/.local/share/bash-completion/completions/ovc
   ```
 
 - Remove all installed versions (except the active one)
