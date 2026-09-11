@@ -20,11 +20,13 @@ pub enum CompletionShell {
 
 /// CLI argument parser - bools required for clap flag parsing
 #[derive(Parser)]
+// Fixed usage; generated lines pair conflicting args
 #[command(
     name = "ovc",
     version,
     about = "OpenShift Client Version Control",
-    disable_version_flag = true
+    disable_version_flag = true,
+    override_usage = "ovc [OPTIONS] [VERSION]"
 )]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
@@ -33,27 +35,28 @@ pub struct Cli {
     pub version: bool,
 
     /// Version to download
-    #[arg(value_name = "VERSION")]
+    #[arg(value_name = "VERSION", conflicts_with_all = ["list", "installed", "prune", "match_server"])]
     pub target_version: Option<String>,
 
     /// List available versions from the mirror
-    #[arg(short = 'l', long = "list", value_name = "VERSION")]
+    #[arg(short = 'l', long = "list", value_name = "VERSION", conflicts_with_all = ["target_version", "installed", "prune", "match_server"])]
     pub list: Option<String>,
 
     /// List installed versions
-    #[arg(short = 'i', long = "installed", value_name = "VERSION")]
+    #[arg(short = 'i', long = "installed", value_name = "VERSION", conflicts_with_all = ["target_version", "list", "prune", "match_server"])]
     pub installed: Option<String>,
 
     /// Remove all installed versions
-    #[arg(short = 'p', long = "prune", conflicts_with_all = ["list", "installed", "match_server"])]
+    #[arg(short = 'p', long = "prune", conflicts_with_all = ["target_version", "list", "installed", "match_server"])]
     pub prune: bool,
 
     /// Download the version matching the currently connected cluster
-    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["list", "installed", "prune"])]
+    #[arg(short = 'm', long = "match-server", conflicts_with_all = ["target_version", "list", "installed", "prune"])]
     pub match_server: bool,
 
     /// Allow insecure TLS connections (skip certificate verification)
-    #[arg(short = 'k', long = "insecure")]
+    // checked in main so meta flags win
+    #[arg(short = 'k', long = "insecure", conflicts_with_all = ["target_version", "list", "installed", "prune"])]
     pub insecure: bool,
 
     /// Make the operation more talkative
