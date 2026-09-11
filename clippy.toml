@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Product names that read as prose, not code
+doc-valid-idents = ["OpenShift", ".."]

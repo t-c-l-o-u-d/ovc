@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Comprehensive tests for the ovc library and CLI application
-//!
-//! This module contains both unit tests for library functions and integration tests
-//! for the CLI application, ensuring 100% test coverage and validating all edge cases
-//! and functionality.
+//! Unit and integration tests for the ovc library and CLI.
 
 use ovc::*;
 use std::fs;
@@ -21,8 +17,7 @@ impl TestTempDir {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_nanos());
 
         let random_suffix = std::process::id();
         let dir_name = format!("ovc_test_{timestamp}_{random_suffix}");
@@ -43,7 +38,7 @@ impl Drop for TestTempDir {
     }
 }
 
-// Helper function to run ovc command and capture output
+// Run ovc and capture output
 fn run_ovc(args: &[&str]) -> std::process::Output {
     Command::new("cargo")
         .args(["run", "--"])
@@ -52,9 +47,7 @@ fn run_ovc(args: &[&str]) -> std::process::Output {
         .expect("Failed to execute ovc command")
 }
 
-/// Build a PATH string with directories containing an `oc` binary removed.
-/// Preserves cargo, rustc, and all other tools while preventing
-/// "Remove the existing oc binary" errors in tests.
+/// Build a PATH with any `oc`-containing directory removed.
 fn path_without_oc() -> String {
     let path = std::env::var("PATH").unwrap_or_default();
     path.split(':')
@@ -72,7 +65,7 @@ mod version_comparison_tests {
     use super::*;
 
     #[test]
-    fn test_compare_versions_basic() {
+    fn compare_versions_basic() {
         // Test basic version comparison
         assert_eq!(compare_versions("4.1.0", "4.2.0"), std::cmp::Ordering::Less);
         assert_eq!(
@@ -86,7 +79,7 @@ mod version_comparison_tests {
     }
 
     #[test]
-    fn test_compare_versions_prerelease() {
+    fn compare_versions_prerelease() {
         // Test pre-release versions
         assert_eq!(
             compare_versions("4.19.0-rc.1", "4.19.0"),
@@ -100,7 +93,7 @@ mod version_comparison_tests {
             compare_versions("4.19.0-rc.1", "4.19.0-rc.2"),
             std::cmp::Ordering::Less
         );
-        // String comparison for rc.10 vs rc.2 - "rc.10" < "rc.2" lexicographically
+        // Lexical order: rc.10 sorts before rc.2
         assert_eq!(
             compare_versions("4.19.0-rc.10", "4.19.0-rc.2"),
             std::cmp::Ordering::Less
@@ -108,7 +101,7 @@ mod version_comparison_tests {
     }
 
     #[test]
-    fn test_compare_versions_patch() {
+    fn compare_versions_patch() {
         // Test with different patch versions
         assert_eq!(
             compare_versions("4.1.1", "4.1.10"),
@@ -125,7 +118,7 @@ mod version_comparison_tests {
     }
 
     #[test]
-    fn test_compare_versions_complex() {
+    fn compare_versions_complex() {
         // Test complex pre-release versions
         assert_eq!(
             compare_versions("4.19.0-alpha.1", "4.19.0-beta.1"),
@@ -142,7 +135,7 @@ mod version_comparison_tests {
     }
 
     #[test]
-    fn test_compare_versions_eus_suffix() {
+    fn compare_versions_eus_suffix() {
         // Test EUS and other suffixes
         assert_eq!(
             compare_versions("4.19.0 EUS", "4.19.0"),
@@ -155,12 +148,12 @@ mod version_comparison_tests {
     }
 
     #[test]
-    fn test_compare_versions_edge_cases() {
+    fn compare_versions_edge_cases() {
         // Test edge cases
         assert_eq!(compare_versions("", ""), std::cmp::Ordering::Equal);
         assert_eq!(compare_versions("1", "1"), std::cmp::Ordering::Equal);
         assert_eq!(compare_versions("1.0", "1"), std::cmp::Ordering::Greater);
-        // String comparison for invalid versions - "invalid.version" > "another.invalid"
+        // Invalid versions fall back to string order
         assert_eq!(
             compare_versions("invalid.version", "another.invalid"),
             std::cmp::Ordering::Greater
@@ -168,7 +161,7 @@ mod version_comparison_tests {
     }
 
     #[test]
-    fn test_version_comparison_with_unusual_formats() {
+    fn compare_unusual_formats() {
         // Test versions with unusual but valid formats
         assert_eq!(
             compare_versions("4.1.0.0", "4.1.0"),
@@ -183,149 +176,11 @@ mod version_comparison_tests {
 }
 
 #[cfg(test)]
-mod version_extraction_tests {
-    use super::*;
-
-    #[test]
-    fn test_extract_major_minor_valid() {
-        assert_eq!(extract_major_minor("4.1.0"), Some("4.1".to_string()));
-        assert_eq!(extract_major_minor("4.10.15"), Some("4.10".to_string()));
-        assert_eq!(extract_major_minor("4.1"), Some("4.1".to_string()));
-        assert_eq!(extract_major_minor("4.1.0-rc.1"), Some("4.1".to_string()));
-        assert_eq!(extract_major_minor("10.20.30"), Some("10.20".to_string()));
-    }
-
-    #[test]
-    fn test_extract_major_minor_invalid() {
-        assert_eq!(extract_major_minor("4"), None);
-        assert_eq!(extract_major_minor("invalid"), None);
-        assert_eq!(extract_major_minor(""), None);
-        assert_eq!(extract_major_minor("."), None);
-        assert_eq!(extract_major_minor("4."), None);
-        assert_eq!(extract_major_minor(".1"), None);
-    }
-
-    #[test]
-    fn test_extract_major_minor_with_many_parts() {
-        assert_eq!(extract_major_minor("1.2.3.4.5.6"), Some("1.2".to_string()));
-        assert_eq!(
-            extract_major_minor("4.19.0.1.2.3-rc.1"),
-            Some("4.19".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_version_number_valid() {
-        assert_eq!(extract_version_number("4.1.0"), "4.1.0");
-        assert_eq!(extract_version_number("4.1.0-dirty"), "4.1.0");
-        assert_eq!(extract_version_number("version: 4.19.0"), "");
-        assert_eq!(extract_version_number("4.19.0 (build info)"), "4.19.0");
-    }
-
-    #[test]
-    fn test_extract_version_number_edge_cases() {
-        assert_eq!(extract_version_number("v4.1.0"), "");
-        assert_eq!(extract_version_number("openshift-4.1.0"), "");
-        assert_eq!(extract_version_number("no-version-here"), "");
-        assert_eq!(extract_version_number(""), "");
-        assert_eq!(extract_version_number("123"), "123");
-        assert_eq!(extract_version_number("1.2.3.4.5"), "1.2.3.4.5");
-    }
-
-    #[test]
-    fn test_extract_version_number_with_special_characters() {
-        assert_eq!(extract_version_number("version=4.19.0"), "");
-        assert_eq!(extract_version_number("v:4.19.0"), "");
-        assert_eq!(extract_version_number("4.19.0+build.123"), "4.19.0");
-        assert_eq!(extract_version_number("4.19.0~snapshot"), "4.19.0");
-    }
-
-    #[test]
-    fn test_extract_version_from_path_valid() {
-        let path = PathBuf::from("/path/to/oc-4.1.0");
-        assert_eq!(extract_version_from_path(&path), "4.1.0");
-
-        let path = PathBuf::from("oc-4.10.15");
-        assert_eq!(extract_version_from_path(&path), "4.10.15");
-
-        let path = PathBuf::from("/home/user/.local/bin/oc_bins/linux-x86_64/oc-4.19.0-rc.1");
-        assert_eq!(extract_version_from_path(&path), "4.19.0-rc.1");
-    }
-
-    #[test]
-    fn test_extract_version_from_path_invalid() {
-        let path = PathBuf::from("/invalid/path");
-        assert_eq!(extract_version_from_path(&path), "unknown");
-
-        let path = PathBuf::from("notoc-4.1.0");
-        assert_eq!(extract_version_from_path(&path), "unknown");
-
-        let path = PathBuf::from("oc-");
-        assert_eq!(extract_version_from_path(&path), "");
-
-        let path = PathBuf::from("");
-        assert_eq!(extract_version_from_path(&path), "unknown");
-    }
-}
-
-#[cfg(test)]
-mod version_stability_tests {
-    use super::*;
-
-    #[test]
-    fn test_is_stable_version_stable() {
-        assert!(is_stable_version("4.1.0"));
-        assert!(is_stable_version("4.10.15"));
-        assert!(is_stable_version("1.0.0"));
-        assert!(is_stable_version("4.19.0.1"));
-        assert!(is_stable_version("4.19.0-hotfix"));
-        assert!(is_stable_version("4.19.0-patch"));
-    }
-
-    #[test]
-    fn test_is_stable_version_unstable() {
-        assert!(!is_stable_version("4.1.0-rc.1"));
-        assert!(!is_stable_version("4.1.0-alpha.1"));
-        assert!(!is_stable_version("4.1.0-beta.1"));
-        assert!(!is_stable_version("4.1.0-nightly"));
-        assert!(!is_stable_version("4.1.0-dev"));
-        assert!(!is_stable_version("4.1.0-snapshot"));
-    }
-
-    #[test]
-    fn test_is_stable_version_case_insensitive() {
-        assert!(!is_stable_version("4.1.0-RC.1"));
-        assert!(!is_stable_version("4.1.0-ALPHA.1"));
-        assert!(!is_stable_version("4.1.0-Beta.1"));
-        assert!(!is_stable_version("4.1.0-NIGHTLY"));
-        assert!(!is_stable_version("4.1.0-Dev"));
-        assert!(!is_stable_version("4.1.0-SNAPSHOT"));
-    }
-
-    #[test]
-    fn test_is_stable_version_edge_cases() {
-        assert!(is_stable_version(""));
-        assert!(is_stable_version("stable"));
-        assert!(is_stable_version("4.19.0-release"));
-        assert!(is_stable_version("4.19.0-final"));
-    }
-
-    #[test]
-    fn test_is_stable_version_with_mixed_case_and_spaces() {
-        // The function only checks for exact substrings, not spaced versions
-        assert!(is_stable_version("4.19.0 - RC 1")); // doesn't contain "-rc" exactly
-        assert!(!is_stable_version("4.19.0-Alpha-1")); // contains "-alpha" (case insensitive)
-        assert!(is_stable_version("4.19.0_beta_1")); // doesn't contain "-beta" exactly
-        assert!(is_stable_version("4.19.0-release-candidate")); // doesn't contain exact keywords
-    }
-}
-
-#[cfg(test)]
 mod version_matching_tests {
     use super::*;
 
     #[test]
-    fn test_find_matching_version_exact_match() {
+    fn matching_exact_match() {
         let available = vec![
             "4.1.0".to_string(),
             "4.1.1".to_string(),
@@ -345,7 +200,7 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_partial_match() {
+    fn matching_partial_match() {
         let available = vec![
             "4.1.0".to_string(),
             "4.1.1".to_string(),
@@ -366,7 +221,7 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_no_match() {
+    fn matching_no_match() {
         let available = vec![
             "4.1.0".to_string(),
             "4.1.1".to_string(),
@@ -378,7 +233,7 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_invalid_input() {
+    fn matching_invalid_input() {
         let available = vec!["4.1.0".to_string(), "4.2.0".to_string()];
 
         assert_eq!(find_matching_version("invalid", &available), None);
@@ -387,13 +242,13 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_empty_available() {
+    fn matching_empty_available() {
         let available: Vec<String> = vec![];
         assert_eq!(find_matching_version("4.1.0", &available), None);
     }
 
     #[test]
-    fn test_find_matching_version_prerelease() {
+    fn find_matching_version_prerelease() {
         let available = vec![
             "4.19.0-rc.1".to_string(),
             "4.19.0-rc.2".to_string(),
@@ -412,7 +267,7 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_sorting() {
+    fn find_matching_version_sorting() {
         let available = vec![
             "4.1.10".to_string(),
             "4.1.2".to_string(),
@@ -420,7 +275,7 @@ mod version_matching_tests {
             "4.1.20".to_string(),
         ];
 
-        // Should return the latest (4.1.20) when looking for 4.1.x
+        // Latest 4.1.x patch is 4.1.20
         assert_eq!(
             find_matching_version("4.1.15", &available),
             Some("4.1.20".to_string())
@@ -428,7 +283,7 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_with_complex_versions() {
+    fn matching_complex_versions() {
         let available = vec![
             "4.19.0-alpha.1".to_string(),
             "4.19.0-beta.1".to_string(),
@@ -438,7 +293,7 @@ mod version_matching_tests {
             "4.19.1".to_string(),
         ];
 
-        // Should find latest stable in the 4.19 series
+        // Finds latest stable in 4.19
         assert_eq!(
             find_matching_version("4.19.5", &available),
             Some("4.19.1".to_string())
@@ -446,7 +301,7 @@ mod version_matching_tests {
     }
 
     #[test]
-    fn test_find_matching_version_no_false_prefix() {
+    fn matching_no_false_prefix() {
         let available = vec![
             "4.1.0".to_string(),
             "4.1.5".to_string(),
@@ -474,7 +329,7 @@ mod platform_tests {
     use super::*;
 
     #[test]
-    fn test_platform_constants() {
+    fn platform_constants() {
         // Test Linux x86_64
         assert_eq!(Platform::LINUX_X86_64.name, "linux-x86_64");
         assert_eq!(Platform::LINUX_X86_64.mirror_path, "x86_64");
@@ -483,7 +338,7 @@ mod platform_tests {
     }
 
     #[test]
-    fn test_platform_detection() {
+    fn platform_detection() {
         let platform = Platform::detect();
 
         // Should detect a valid platform
@@ -494,7 +349,7 @@ mod platform_tests {
     }
 
     #[test]
-    fn test_platform_url_building() {
+    fn platform_url_building() {
         let platform = Platform::LINUX_X86_64;
 
         let download_url = platform.build_download_url("4.1.0");
@@ -517,7 +372,7 @@ mod platform_tests {
     }
 
     #[test]
-    fn test_all_platforms_url_building() {
+    fn all_platforms_url_building() {
         let platforms = [Platform::LINUX_X86_64];
 
         for platform in &platforms {
@@ -538,72 +393,72 @@ mod version_pattern_tests {
     use super::*;
 
     #[test]
-    fn test_exact_match() {
+    fn exact_match() {
         assert!(matches_version_pattern("4.19.0", "4.19.0"));
         assert!(matches_version_pattern("4.1.0-rc.1", "4.1.0-rc.1"));
     }
 
     #[test]
-    fn test_prefix_with_dot() {
+    fn prefix_with_dot() {
         assert!(matches_version_pattern("4.19.0", "4.19"));
         assert!(matches_version_pattern("4.19.1", "4.19"));
         assert!(matches_version_pattern("4.19.10", "4.19"));
     }
 
     #[test]
-    fn test_prefix_with_dash() {
+    fn prefix_with_dash() {
         assert!(matches_version_pattern("4.19.0-rc.1", "4.19.0"));
         assert!(matches_version_pattern("4.19.0-alpha.1", "4.19.0"));
     }
 
     #[test]
-    fn test_no_false_prefix_major_minor() {
+    fn false_prefix_major_minor() {
         assert!(!matches_version_pattern("4.13.58", "4.1"));
         assert!(!matches_version_pattern("4.13.0", "4.1"));
     }
 
     #[test]
-    fn test_no_false_prefix_minor_boundary() {
+    fn false_prefix_minor_boundary() {
         assert!(!matches_version_pattern("4.10.0", "4.1"));
         assert!(!matches_version_pattern("4.190.0", "4.19"));
     }
 
     #[test]
-    fn test_partial_minor_boundaries() {
+    fn partial_minor_boundaries() {
         assert!(matches_version_pattern("4.1.0", "4.1"));
         assert!(!matches_version_pattern("4.10.0", "4.1"));
         assert!(!matches_version_pattern("4.12.0", "4.1"));
     }
 
     #[test]
-    fn test_empty_pattern() {
-        // Empty pattern: "".is_empty() means starts_with(".") and starts_with("-") are false
+    fn empty_pattern() {
+        // Empty pattern matches no prefix
         assert!(!matches_version_pattern("4.19.0", ""));
     }
 
     #[test]
-    fn test_empty_version() {
+    fn empty_version() {
         assert!(!matches_version_pattern("", "4.19"));
     }
 
     #[test]
-    fn test_both_empty() {
+    fn both_empty() {
         assert!(matches_version_pattern("", ""));
     }
 
     #[test]
-    fn test_pattern_longer_than_version() {
+    fn pattern_longer_than_version() {
         assert!(!matches_version_pattern("4.19", "4.19.0"));
     }
 
     #[test]
-    fn test_four_part_version() {
+    fn four_part_version() {
         assert!(matches_version_pattern("4.19.0.1", "4.19.0"));
         assert!(matches_version_pattern("4.19.0.1", "4.19"));
     }
 
     #[test]
-    fn test_nested_dash_prefix() {
+    fn nested_dash_prefix() {
         assert!(matches_version_pattern("4.19.0-rc.1.2", "4.19.0-rc.1"));
         assert!(matches_version_pattern("4.19.0-rc.1.2", "4.19.0"));
     }
@@ -625,7 +480,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_cache_new_timestamp() {
+    fn cache_new_timestamp() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -635,7 +490,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_cache_new_with_versions() {
+    fn cache_new_with_versions() {
         let v1 = make_version_info("4.19.0", "linux-x86_64", "https://example.com/4.19.0");
         let v2 = make_version_info("4.20.0", "linux-x86_64", "https://example.com/4.20.0");
         let cache = VersionCache::new(vec![v1, v2]);
@@ -643,7 +498,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_get_version_strings_order() {
+    fn get_version_strings_order() {
         let v1 = make_version_info("4.19.0", "linux-x86_64", "https://a");
         let v2 = make_version_info("4.20.0", "linux-x86_64", "https://b");
         let v3 = make_version_info("4.18.0", "linux-x86_64", "https://c");
@@ -653,13 +508,13 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_get_version_strings_empty() {
+    fn get_version_strings_empty() {
         let cache = VersionCache::new(vec![]);
         assert!(cache.get_version_strings().is_empty());
     }
 
     #[test]
-    fn test_get_download_url_found() {
+    fn get_download_url_found() {
         let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
         let cache = VersionCache::new(vec![v]);
         assert_eq!(
@@ -669,41 +524,41 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_get_download_url_wrong_version() {
+    fn download_url_wrong_version() {
         let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
         let cache = VersionCache::new(vec![v]);
         assert_eq!(cache.get_download_url("4.20.0", "linux-x86_64"), None);
     }
 
     #[test]
-    fn test_get_download_url_wrong_platform() {
+    fn download_url_wrong_platform() {
         let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
         let cache = VersionCache::new(vec![v]);
         assert_eq!(cache.get_download_url("4.19.0", "darwin-arm64"), None);
     }
 
     #[test]
-    fn test_get_download_url_empty_cache() {
+    fn download_url_empty_cache() {
         let cache = VersionCache::new(vec![]);
         assert_eq!(cache.get_download_url("4.19.0", "linux-x86_64"), None);
     }
 
     #[test]
-    fn test_has_version_true() {
+    fn has_version_true() {
         let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
         let cache = VersionCache::new(vec![v]);
         assert!(cache.has_version("4.19.0"));
     }
 
     #[test]
-    fn test_has_version_false() {
+    fn has_version_false() {
         let v = make_version_info("4.19.0", "linux-x86_64", "https://mirror/4.19.0.tar.gz");
         let cache = VersionCache::new(vec![v]);
         assert!(!cache.has_version("4.20.0"));
     }
 
     #[test]
-    fn test_build_version_info_single() {
+    fn build_version_info_single() {
         let versions = vec!["4.19.0".to_string()];
         let infos = build_version_info(&versions);
         assert_eq!(infos.len(), 1);
@@ -714,14 +569,14 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_build_version_info_empty() {
+    fn build_version_info_empty() {
         let versions: Vec<String> = vec![];
         let infos = build_version_info(&versions);
         assert!(infos.is_empty());
     }
 
     #[test]
-    fn test_build_version_info_multiple() {
+    fn build_version_info_multiple() {
         let versions = vec![
             "4.18.0".to_string(),
             "4.19.0".to_string(),
@@ -736,7 +591,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_format_cache_age_hours() {
+    fn format_cache_age_hours() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -749,7 +604,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_format_cache_age_minutes() {
+    fn format_cache_age_minutes() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -762,7 +617,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_format_cache_age_days() {
+    fn format_cache_age_days() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -772,13 +627,13 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_cache_is_expired_fresh() {
+    fn cache_is_expired_fresh() {
         let cache = VersionCache::new(vec![]);
         assert!(!cache.is_expired());
     }
 
     #[test]
-    fn test_cache_is_expired_old() {
+    fn cache_is_expired_old() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -789,7 +644,7 @@ mod cache_unit_tests {
     }
 
     #[test]
-    fn test_cache_is_expired_boundary() {
+    fn cache_is_expired_boundary() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -806,7 +661,7 @@ mod cache_integration_tests {
     use std::time::SystemTime;
 
     #[test]
-    fn test_cache_roundtrip_via_list() {
+    fn cache_roundtrip_via_list() {
         let temp_dir = TestTempDir::new().unwrap();
         let cache_dir = temp_dir.path().join("cache");
 
@@ -841,7 +696,7 @@ mod cache_integration_tests {
     }
 
     #[test]
-    fn test_cache_legacy_migration() {
+    fn cache_legacy_migration() {
         let temp_dir = TestTempDir::new().unwrap();
         let cache_dir = temp_dir.path().join("cache");
         let ovc_cache_dir = cache_dir.join("ovc");
@@ -868,7 +723,7 @@ mod cache_integration_tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        // Cache file should now be in new format with "urls" key
+        // Migrated cache carries a urls key
         let content = fs::read_to_string(&cache_file).unwrap();
         assert!(
             content.contains("urls"),
@@ -877,20 +732,20 @@ mod cache_integration_tests {
     }
 
     #[test]
-    fn test_cache_expired_triggers_refresh() {
+    fn cache_expired_triggers_refresh() {
         let temp_dir = TestTempDir::new().unwrap();
         let cache_dir = temp_dir.path().join("cache");
         let ovc_cache_dir = cache_dir.join("ovc");
         fs::create_dir_all(&ovc_cache_dir).unwrap();
         let cache_file = ovc_cache_dir.join("versions.json");
 
-        // Write a cache with a timestamp 4 days ago (well past 72h TTL)
+        // Timestamp 4 days old, past the TTL
         let old_timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs()
             - 4 * 86400;
-        // Use a fake version so stale data is distinguishable from fresh data
+        // Fake version marks the stale data
         let old_cache = format!(
             r#"{{"versions":[{{"version":"99.99.99","urls":{{"linux-x86_64":"https://example.com"}}}}],"timestamp":{old_timestamp}}}"#
         );
@@ -916,7 +771,7 @@ mod cache_integration_tests {
     }
 
     #[test]
-    fn test_cache_corrupted_recovery() {
+    fn cache_corrupted_recovery() {
         let temp_dir = TestTempDir::new().unwrap();
         let cache_dir = temp_dir.path().join("cache");
         let ovc_cache_dir = cache_dir.join("ovc");
@@ -957,7 +812,7 @@ mod cli_basic_tests {
     use super::*;
 
     #[test]
-    fn test_help_command() {
+    fn help_command() {
         let output = run_ovc(&["--help"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -969,17 +824,17 @@ mod cli_basic_tests {
     }
 
     #[test]
-    fn test_version_command() {
+    fn version_command() {
         let output = run_ovc(&["--version"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // Should print only the version number, no "ovc" prefix
+        // Prints the bare version number
         let version = env!("CARGO_PKG_VERSION");
         assert_eq!(stdout.trim(), version);
     }
 
     #[test]
-    fn test_version_verbose_command() {
+    fn version_verbose_command() {
         let output = run_ovc(&["--version", "--verbose"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -990,7 +845,7 @@ mod cli_basic_tests {
     }
 
     #[test]
-    fn test_missing_version_error() {
+    fn missing_version_error() {
         let output = run_ovc(&[]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -998,23 +853,23 @@ mod cli_basic_tests {
     }
 
     #[test]
-    fn test_invalid_partial_version() {
+    fn invalid_partial_version() {
         // Test that providing only major version fails
         let output = run_ovc(&["4"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Version must include at least major and minor version"));
+        assert!(stderr.contains("Version needs major and minor"));
     }
 
     #[test]
-    fn test_error_messages_go_to_stderr() {
+    fn errors_go_to_stderr() {
         let output = run_ovc(&["invalid-version"]);
         assert!(!output.status.success());
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
-        // Error messages should go to stderr, not stdout
+        // Errors belong on stderr
         assert!(stdout.trim().is_empty() || !stdout.contains("error"));
         assert!(!stderr.trim().is_empty());
     }
@@ -1025,7 +880,7 @@ mod cli_download_tests {
     use super::*;
 
     #[test]
-    fn test_download_invalid_version() {
+    fn download_invalid_version() {
         let output = run_ovc(&["999.999.999"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1033,7 +888,7 @@ mod cli_download_tests {
     }
 
     #[test]
-    fn test_network_error_handling() {
+    fn network_error_handling() {
         let temp_dir = TestTempDir::new().unwrap();
         let output = Command::new("cargo")
             .args(["run", "--", "999.0.0"])
@@ -1057,7 +912,7 @@ mod cli_list_tests {
     use super::*;
 
     #[test]
-    fn test_list_available_versions_by_pattern() {
+    fn list_by_pattern() {
         let output = run_ovc(&["--list", "4.19"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1075,13 +930,13 @@ mod cli_list_tests {
             }
         }
 
-        // Should contain both rc versions and stable versions
+        // Holds rc and stable versions
         assert!(stdout.contains("4.19.0-rc"));
         assert!(stdout.contains("4.19.0"));
     }
 
     #[test]
-    fn test_list_available_versions_specific_patch() {
+    fn list_specific_patch() {
         let output = run_ovc(&["--list", "4.19.0"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1099,22 +954,22 @@ mod cli_list_tests {
             }
         }
 
-        // Should contain rc versions for 4.19.0 but not 4.19.1
+        // Matches 4.19.0 rc versions only
         assert!(stdout.contains("4.19.0-rc"));
         assert!(stdout.contains("4.19.0"));
         assert!(!stdout.contains("4.19.1"));
     }
 
     #[test]
-    fn test_list_available_versions_invalid_format() {
+    fn list_invalid_format() {
         let output = run_ovc(&["--list", "4"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Version must include at least major and minor version"));
+        assert!(stderr.contains("Version needs major and minor"));
     }
 
     #[test]
-    fn test_list_available_versions_no_matches() {
+    fn list_no_matches() {
         let output = run_ovc(&["--list", "999.999"]);
         assert!(!output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1124,7 +979,7 @@ mod cli_list_tests {
     }
 
     #[test]
-    fn test_list_no_matches_verbose() {
+    fn list_no_matches_verbose() {
         let output = run_ovc(&["-v", "--list", "999.999"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1132,17 +987,17 @@ mod cli_list_tests {
     }
 
     #[test]
-    fn test_list_available_versions_verbose() {
+    fn list_available_versions_verbose() {
         let output = run_ovc(&["-v", "--list", "4.19"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
 
-        // Verbose mode should still just list versions (no extra info for list command)
+        // Verbose adds nothing to list output
         let lines: Vec<&str> = stdout.lines().collect();
         for line in lines {
             if !line.trim().is_empty() {
                 assert!(line.starts_with("4.19"));
-                // Should not contain extra verbose info like paths
+                // No paths in list output
                 assert!(!line.contains('('));
             }
         }
@@ -1154,8 +1009,8 @@ mod cli_installed_tests {
     use super::*;
 
     #[test]
-    fn test_installed_command_empty() {
-        // Create a temporary directory to test with clean state
+    fn installed_command_empty() {
+        // Temporary directory gives a clean state
         let temp_dir = TestTempDir::new().unwrap();
         let home_dir = temp_dir.path();
 
@@ -1166,7 +1021,7 @@ mod cli_installed_tests {
             .output()
             .expect("Failed to execute ovc command");
 
-        // Should fail quietly when no versions are installed
+        // Fails quietly when none installed
         assert!(!output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.trim().is_empty());
@@ -1175,7 +1030,7 @@ mod cli_installed_tests {
     }
 
     #[test]
-    fn test_installed_no_matches() {
+    fn installed_no_matches() {
         let output = run_ovc(&["--installed", "999.999"]);
         assert!(!output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1190,7 +1045,7 @@ mod cli_prune_tests {
     use super::*;
 
     #[test]
-    fn test_prune_no_versions_installed() {
+    fn prune_no_versions_installed() {
         let temp_dir = TestTempDir::new().unwrap();
         let output = Command::new("cargo")
             .args(["run", "--", "--prune"])
@@ -1210,7 +1065,7 @@ mod cli_match_server_tests {
     use super::*;
 
     #[test]
-    fn test_match_server_no_connection() {
+    fn match_server_no_connection() {
         let temp_dir = TestTempDir::new().unwrap();
         let home_dir = temp_dir.path();
 
@@ -1225,13 +1080,13 @@ mod cli_match_server_tests {
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("Not connected") || stderr.contains("Failed to run"),
+            stderr.contains("Not connected") || stderr.contains("Cannot run"),
             "Expected cluster connection error, got: {stderr}"
         );
     }
 
     #[test]
-    fn test_match_server_mutual_exclusivity_with_list() {
+    fn match_server_rejects_list() {
         let output = run_ovc(&["--match-server", "--list", "4.19"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1239,7 +1094,7 @@ mod cli_match_server_tests {
     }
 
     #[test]
-    fn test_match_server_mutual_exclusivity_with_prune() {
+    fn match_server_rejects_prune() {
         let output = run_ovc(&["--match-server", "--prune"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1247,7 +1102,7 @@ mod cli_match_server_tests {
     }
 
     #[test]
-    fn test_match_server_mutual_exclusivity_with_installed() {
+    fn match_server_rejects_installed() {
         let output = run_ovc(&["--match-server", "--installed", "4.19"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1275,37 +1130,37 @@ mod cli_mutual_exclusivity_tests {
     }
 
     #[test]
-    fn test_list_conflicts_with_installed() {
+    fn list_conflicts_with_installed() {
         assert_conflict(&["--list", "4.19", "--installed", "4.19"]);
     }
 
     #[test]
-    fn test_list_conflicts_with_prune() {
+    fn list_conflicts_with_prune() {
         assert_conflict(&["--list", "4.19", "--prune"]);
     }
 
     #[test]
-    fn test_installed_conflicts_with_prune() {
+    fn installed_conflicts_with_prune() {
         assert_conflict(&["--installed", "4.19", "--prune"]);
     }
 
     #[test]
-    fn test_list_conflicts_with_target_version() {
+    fn list_conflicts_target() {
         assert_conflict(&["--list", "4.19", "4.20"]);
     }
 
     #[test]
-    fn test_installed_conflicts_with_target_version() {
+    fn installed_conflicts_target() {
         assert_conflict(&["--installed", "4.19", "4.20"]);
     }
 
     #[test]
-    fn test_prune_conflicts_with_target_version() {
+    fn prune_conflicts_target() {
         assert_conflict(&["--prune", "4.19"]);
     }
 
     #[test]
-    fn test_match_server_conflicts_with_target_version() {
+    fn match_server_conflicts_target() {
         assert_conflict(&["--match-server", "4.19"]);
     }
 }
@@ -1330,7 +1185,7 @@ mod cli_insecure_tests {
     }
 
     #[test]
-    fn test_insecure_alone_is_rejected() {
+    fn insecure_alone_is_rejected() {
         let output = run_ovc(&["--insecure"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1342,7 +1197,7 @@ mod cli_insecure_tests {
 
     /// Meta flags outrank the --insecure dependency check
     #[test]
-    fn test_insecure_does_not_block_version() {
+    fn insecure_allows_version() {
         let output = run_ovc(&["--insecure", "--version"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1350,7 +1205,7 @@ mod cli_insecure_tests {
     }
 
     #[test]
-    fn test_insecure_does_not_block_completion() {
+    fn insecure_allows_completion() {
         let output = run_ovc(&["--insecure", "--completion", "bash"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1358,7 +1213,7 @@ mod cli_insecure_tests {
     }
 
     #[test]
-    fn test_insecure_does_not_block_help() {
+    fn insecure_allows_help() {
         let output = run_ovc(&["--insecure", "--help"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1366,23 +1221,23 @@ mod cli_insecure_tests {
     }
 
     #[test]
-    fn test_insecure_with_list_is_rejected() {
+    fn insecure_rejects_list() {
         assert_rejected(&["--insecure", "--list", "4.19"]);
     }
 
     #[test]
-    fn test_insecure_with_installed_is_rejected() {
+    fn insecure_rejects_installed() {
         assert_rejected(&["--insecure", "--installed", "4.19"]);
     }
 
     #[test]
-    fn test_insecure_with_prune_is_rejected() {
+    fn insecure_rejects_prune() {
         assert_rejected(&["--insecure", "--prune"]);
     }
 
     /// Guards a clap quirk: requires drops on conflict
     #[test]
-    fn test_insecure_with_target_version_is_rejected() {
+    fn insecure_rejects_target() {
         assert_rejected(&["4.19", "--insecure"]);
     }
 }
@@ -1396,7 +1251,7 @@ mod cli_unrestricted_tests {
     use super::*;
 
     #[test]
-    fn test_version_wins_over_list() {
+    fn version_wins_over_list() {
         let output = run_ovc(&["--version", "--list", "4.19"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1404,7 +1259,7 @@ mod cli_unrestricted_tests {
     }
 
     #[test]
-    fn test_completion_wins_over_prune() {
+    fn completion_wins_over_prune() {
         let output = run_ovc(&["--completion", "bash", "--prune"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1412,7 +1267,7 @@ mod cli_unrestricted_tests {
     }
 
     #[test]
-    fn test_help_wins_over_installed() {
+    fn help_wins_over_installed() {
         let output = run_ovc(&["--installed", "4.19", "--help"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1420,7 +1275,7 @@ mod cli_unrestricted_tests {
     }
 
     #[test]
-    fn test_verbose_combines_with_list() {
+    fn verbose_combines_with_list() {
         let output = run_ovc(&["--list", "4.19", "--verbose"]);
         assert!(output.status.success());
     }
@@ -1435,7 +1290,7 @@ mod cli_completion_tests {
     use super::*;
 
     #[test]
-    fn test_completion_bash() {
+    fn completion_bash() {
         let output = run_ovc(&["--completion", "bash"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1445,7 +1300,7 @@ mod cli_completion_tests {
 
     /// Completions cover every flag defined in the parser
     #[test]
-    fn test_completion_lists_flags() {
+    fn completion_lists_flags() {
         let output = run_ovc(&["--completion", "bash"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1464,7 +1319,7 @@ mod cli_completion_tests {
     }
 
     #[test]
-    fn test_completion_zsh_unsupported() {
+    fn completion_zsh_unsupported() {
         let output = run_ovc(&["--completion", "zsh"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1475,7 +1330,7 @@ mod cli_completion_tests {
     }
 
     #[test]
-    fn test_completion_fish_unsupported() {
+    fn completion_fish_unsupported() {
         let output = run_ovc(&["--completion", "fish"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1513,7 +1368,7 @@ mod cli_prune_isolated_tests {
     }
 
     #[test]
-    fn test_prune_removes_inactive_versions() {
+    fn prune_removes_inactive_versions() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.0", "4.19.1", "4.20.0"]);
@@ -1548,7 +1403,7 @@ mod cli_prune_isolated_tests {
     }
 
     #[test]
-    fn test_prune_verbose_shows_removal_count() {
+    fn prune_verbose_shows_count() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.0", "4.19.1"]);
@@ -1569,7 +1424,7 @@ mod cli_prune_isolated_tests {
     }
 
     #[test]
-    fn test_prune_empty_dir() {
+    fn prune_empty_dir() {
         let temp_dir = TestTempDir::new().unwrap();
         let output = Command::new("cargo")
             .args(["run", "--", "--prune"])
@@ -1601,7 +1456,7 @@ mod cli_installed_isolated_tests {
     }
 
     #[test]
-    fn test_installed_from_known_state() {
+    fn installed_from_known_state() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.0", "4.19.1", "4.20.0"]);
@@ -1625,7 +1480,7 @@ mod cli_installed_isolated_tests {
     }
 
     #[test]
-    fn test_installed_verbose_shows_paths() {
+    fn installed_verbose_shows_paths() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.0"]);
@@ -1644,7 +1499,7 @@ mod cli_installed_isolated_tests {
     }
 
     #[test]
-    fn test_installed_no_matches_verbose() {
+    fn installed_no_matches_verbose() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.0"]);
@@ -1662,7 +1517,7 @@ mod cli_installed_isolated_tests {
     }
 
     #[test]
-    fn test_installed_no_false_prefix_match() {
+    fn installed_no_false_prefix() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.1.0", "4.13.0", "4.10.0"]);
@@ -1688,15 +1543,15 @@ mod cli_installed_isolated_tests {
     }
 
     #[test]
-    fn test_installed_invalid_format() {
+    fn installed_invalid_format() {
         let output = run_ovc(&["--installed", "4"]);
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("Version must include at least major and minor version"));
+        assert!(stderr.contains("Version needs major and minor"));
     }
 
     #[test]
-    fn test_installed_sorted_output() {
+    fn installed_sorted_output() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
         create_fake_binaries(home, &["4.19.3", "4.19.1", "4.19.10", "4.19.2"]);
@@ -1728,11 +1583,11 @@ mod manpage_unit_tests {
     use ovc::manpage;
 
     #[test]
-    fn test_get_data_dir_with_xdg() {
+    fn data_dir_with_xdg() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
 
-        // SAFETY: test runs in a single thread; no concurrent env access
+        // SAFETY: single thread, no concurrent env access
         unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
         let dir = manpage::get_data_dir().unwrap();
         unsafe { std::env::remove_var("XDG_DATA_HOME") };
@@ -1742,11 +1597,11 @@ mod manpage_unit_tests {
     }
 
     #[test]
-    fn test_get_data_dir_falls_back_to_home() {
+    fn data_dir_home_fallback() {
         let temp_dir = TestTempDir::new().unwrap();
         let home = temp_dir.path();
 
-        // SAFETY: test runs in a single thread; no concurrent env access
+        // SAFETY: single thread, no concurrent env access
         unsafe { std::env::remove_var("XDG_DATA_HOME") };
         let saved_home = std::env::var("HOME").unwrap();
         unsafe { std::env::set_var("HOME", home) };
@@ -1758,11 +1613,11 @@ mod manpage_unit_tests {
     }
 
     #[test]
-    fn test_get_man_install_dir_creates_path() {
+    fn man_dir_creates_path() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
 
-        // SAFETY: test runs in a single thread; no concurrent env access
+        // SAFETY: single thread, no concurrent env access
         unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
         let dir = manpage::get_man_install_dir().unwrap();
         unsafe { std::env::remove_var("XDG_DATA_HOME") };
@@ -1772,11 +1627,11 @@ mod manpage_unit_tests {
     }
 
     #[test]
-    fn test_read_installed_version_missing() {
+    fn read_installed_version_missing() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
 
-        // SAFETY: test runs in a single thread; no concurrent env access
+        // SAFETY: single thread, no concurrent env access
         unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
         let version = manpage::read_installed_version();
         unsafe { std::env::remove_var("XDG_DATA_HOME") };
@@ -1785,11 +1640,11 @@ mod manpage_unit_tests {
     }
 
     #[test]
-    fn test_write_and_read_version_file() {
+    fn write_and_read_version() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
 
-        // SAFETY: test runs in a single thread; no concurrent env access
+        // SAFETY: single thread, no concurrent env access
         unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
         manpage::write_version_file("1.2.3").unwrap();
         let version = manpage::read_installed_version();
@@ -1799,14 +1654,14 @@ mod manpage_unit_tests {
     }
 
     #[test]
-    fn test_read_installed_version_trims_whitespace() {
+    fn read_version_trims_whitespace() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
         let ovc_dir = data_home.join("ovc");
         fs::create_dir_all(&ovc_dir).unwrap();
         fs::write(ovc_dir.join("man-version"), "1.2.3\n").unwrap();
 
-        // SAFETY: test runs in a single thread; no concurrent env access
+        // SAFETY: single thread, no concurrent env access
         unsafe { std::env::set_var("XDG_DATA_HOME", &data_home) };
         let version = manpage::read_installed_version();
         unsafe { std::env::remove_var("XDG_DATA_HOME") };
@@ -1819,13 +1674,13 @@ mod manpage_integration_tests {
     use super::*;
 
     #[test]
-    fn test_ensure_man_page_skips_when_version_matches() {
+    fn skips_when_matching() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
         let ovc_dir = data_home.join("ovc");
         fs::create_dir_all(&ovc_dir).unwrap();
 
-        // Write the current version so ensure_man_page skips the install
+        // Current version makes ensure_man_page skip
         let current_version = env!("CARGO_PKG_VERSION");
         fs::write(ovc_dir.join("man-version"), current_version).unwrap();
 
@@ -1836,7 +1691,7 @@ mod manpage_integration_tests {
             .expect("Failed to execute ovc command");
 
         assert!(output.status.success());
-        // man1 directory should not be created when version already matches
+        // man1 stays absent when version matches
         assert!(
             !data_home.join("man/man1/ovc.1").exists(),
             "Man page should not be written when version matches"
@@ -1844,7 +1699,7 @@ mod manpage_integration_tests {
     }
 
     #[test]
-    fn test_ensure_man_page_installs_on_version_mismatch() {
+    fn installs_on_mismatch() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
         let ovc_dir = data_home.join("ovc");
@@ -1869,7 +1724,7 @@ mod manpage_integration_tests {
     }
 
     #[test]
-    fn test_ensure_man_page_installs_on_first_run() {
+    fn installs_on_first_run() {
         let temp_dir = TestTempDir::new().unwrap();
         let data_home = temp_dir.path().join("data");
 

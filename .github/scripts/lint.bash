@@ -4,10 +4,10 @@
 set -o errexit -o nounset -o pipefail
 
 echo -e "\n[cargo-check]"
-cargo check --all-features --locked --quiet
+cargo check --all-features --locked --all-targets --quiet
 
 echo -e "\n[cargo-clippy]"
-cargo clippy --all-features --locked --quiet -- \
+cargo clippy --all-features --locked --all-targets --quiet -- \
   --deny warnings \
   --deny clippy::all \
   --deny clippy::correctness \
@@ -17,7 +17,6 @@ cargo clippy --all-features --locked --quiet -- \
   --deny clippy::style \
   --deny clippy::pedantic \
   --deny clippy::cargo \
-  --allow clippy::doc-markdown \
   --allow clippy::multiple_crate_versions
 
 echo -e "\n[cargo-deny]"

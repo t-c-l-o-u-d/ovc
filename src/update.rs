@@ -3,6 +3,7 @@
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -14,7 +15,7 @@ const GITHUB_OWNER: &str = "t-c-l-o-u-d";
 const GITHUB_REPO: &str = "ovc";
 const UPDATE_COOLDOWN: Duration = Duration::from_hours(24);
 
-/// Try to auto-update ovc to the latest GitHub release. Non-fatal.
+/// Update ovc to the latest GitHub release. Non-fatal.
 pub fn try_auto_update(verbose: bool) {
     if let Err(e) = run_update(verbose)
         && verbose
@@ -23,15 +24,21 @@ pub fn try_auto_update(verbose: bool) {
     }
 }
 
+/// Download, verify, and install a newer release.
 fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
     if !cooldown_elapsed() {
         return Ok(());
     }
-    record_cooldown();
+    // A failed stamp must not veto the update
+    if let Err(e) = record_cooldown()
+        && verbose
+    {
+        eprintln!("ovc: cannot record update cooldown: {e}");
+    }
 
     let current = env!("CARGO_PKG_VERSION");
     if verbose {
-        eprintln!("ovc: checking for updates (current: v{current})...");
+        eprintln!("ovc: checking for updates (current: v{current})");
     }
 
     let (latest, bin_url, sha_url) = get_latest_github_release(verbose)?;
@@ -50,8 +57,8 @@ fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
     let exe = std::env::current_exe()?;
     let tmp = exe.with_extension("update");
     download_file(&bin_url, &tmp)?;
-    verify_sha256(&sha_url, &tmp)?;
-    replace_binary(&tmp, &exe)?;
+    verify_sha256(&sha_url, &tmp, verbose)?;
+    replace_binary(&tmp, &exe, verbose)?;
 
     if verbose {
         eprintln!("ovc: updated from v{current} to v{latest}");
@@ -59,12 +66,13 @@ fn run_update(verbose: bool) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Get the latest release version, binary URL, and checksum URL.
 fn get_latest_github_release(verbose: bool) -> Result<(String, String, String), Box<dyn Error>> {
     let api_url =
         format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest");
 
     if verbose {
-        eprintln!("Fetching release info from: {api_url}");
+        eprintln!("ovc: fetching release info from {api_url}");
     }
 
     let client = reqwest::blocking::Client::builder()
@@ -74,12 +82,7 @@ fn get_latest_github_release(verbose: bool) -> Result<(String, String, String), 
     let resp = client.get(&api_url).send()?;
 
     if !resp.status().is_success() {
-        return Err(format!(
-            "Failed to fetch release info: {} ({})",
-            api_url,
-            resp.status()
-        )
-        .into());
+        return Err(format!("Cannot fetch release info: {} ({})", api_url, resp.status()).into());
     }
 
     let release: serde_json::Value = serde_json::from_str(&resp.text()?)?;
@@ -115,6 +118,7 @@ fn get_latest_github_release(verbose: bool) -> Result<(String, String, String), 
     Ok((version.to_string(), bin_url, sha_url))
 }
 
+/// Download a URL to a path and mark it executable.
 fn download_file(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
     use std::os::unix::fs::PermissionsExt;
 
@@ -125,7 +129,7 @@ fn download_file(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
     let resp = client.get(url).send()?;
 
     if !resp.status().is_success() {
-        return Err(format!("Failed to download update: {} ({})", url, resp.status()).into());
+        return Err(format!("Cannot download update: {} ({})", url, resp.status()).into());
     }
 
     let bytes = resp.bytes()?;
@@ -135,7 +139,8 @@ fn download_file(url: &str, dest: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn verify_sha256(sha_url: &str, bin_path: &Path) -> Result<(), Box<dyn Error>> {
+/// Check the download against its published checksum.
+fn verify_sha256(sha_url: &str, bin_path: &Path, verbose: bool) -> Result<(), Box<dyn Error>> {
     let client = reqwest::blocking::Client::builder()
         .user_agent(format!("ovc/{}", env!("CARGO_PKG_VERSION")))
         .build()?;
@@ -143,12 +148,7 @@ fn verify_sha256(sha_url: &str, bin_path: &Path) -> Result<(), Box<dyn Error>> {
     let resp = client.get(sha_url).send()?;
 
     if !resp.status().is_success() {
-        return Err(format!(
-            "Failed to download checksum: {} ({})",
-            sha_url,
-            resp.status()
-        )
-        .into());
+        return Err(format!("Cannot download checksum: {} ({})", sha_url, resp.status()).into());
     }
 
     let expected = resp
@@ -167,30 +167,55 @@ fn verify_sha256(sha_url: &str, bin_path: &Path) -> Result<(), Box<dyn Error>> {
         });
 
     if actual != expected {
-        let _ = fs::remove_file(bin_path);
+        if let Err(e) = fs::remove_file(bin_path)
+            && verbose
+        {
+            eprintln!("ovc: cannot remove bad download: {e}");
+        }
         return Err(format!("sha256 mismatch (expected {expected}, got {actual})").into());
     }
 
     Ok(())
 }
 
-fn replace_binary(new_binary: &Path, current_binary: &Path) -> Result<(), Box<dyn Error>> {
+/// Swap in the new binary, restoring the old one on failure.
+fn replace_binary(
+    new_binary: &Path,
+    current_binary: &Path,
+    verbose: bool,
+) -> Result<(), Box<dyn Error>> {
     let old_path = current_binary.with_extension("old");
 
-    let _ = fs::remove_file(&old_path);
-
-    fs::rename(current_binary, &old_path)
-        .map_err(|e| format!("Failed to backup current binary: {e}"))?;
-
-    if let Err(e) = fs::rename(new_binary, current_binary) {
-        let _ = fs::rename(&old_path, current_binary);
-        return Err(format!("Failed to install new binary: {e}").into());
+    // A missing backup is the normal case
+    if let Err(e) = fs::remove_file(&old_path)
+        && e.kind() != io::ErrorKind::NotFound
+    {
+        return Err(format!("Cannot clear stale backup: {e}").into());
     }
 
-    let _ = fs::remove_file(&old_path);
+    fs::rename(current_binary, &old_path)
+        .map_err(|e| format!("Cannot back up current binary: {e}"))?;
+
+    if let Err(e) = fs::rename(new_binary, current_binary) {
+        if let Err(restore) = fs::rename(&old_path, current_binary) {
+            return Err(format!(
+                "Install failed ({e}); restore {} manually: {restore}",
+                old_path.display()
+            )
+            .into());
+        }
+        return Err(format!("Cannot install new binary: {e}").into());
+    }
+
+    if let Err(e) = fs::remove_file(&old_path)
+        && verbose
+    {
+        eprintln!("ovc: cannot remove backup {}: {e}", old_path.display());
+    }
     Ok(())
 }
 
+/// Check whether the update cooldown has passed.
 pub fn cooldown_elapsed() -> bool {
     let Some(path) = cooldown_path() else {
         return true;
@@ -207,14 +232,15 @@ pub fn cooldown_elapsed() -> bool {
     age >= UPDATE_COOLDOWN
 }
 
-pub fn record_cooldown() {
+/// Stamp the cooldown file with this check.
+pub fn record_cooldown() -> io::Result<()> {
     let Some(path) = cooldown_path() else {
-        return;
+        return Ok(());
     };
     if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
+        fs::create_dir_all(dir)?;
     }
-    let _ = fs::write(&path, "");
+    fs::write(&path, "")
 }
 
 pub fn cooldown_path() -> Option<PathBuf> {
