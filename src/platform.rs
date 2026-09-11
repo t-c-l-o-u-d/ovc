@@ -1,34 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Platform detection and URL building for OpenShift client binaries
-//!
-//! This module provides functionality for detecting the current platform and
-//! building appropriate download URLs for OpenShift client binaries from the
-//! official mirror.
+//! Platform detection and download URL building for `oc` binaries.
 
-/// Base URL for the OpenShift mirror where client binaries are hosted
+/// Base URL of the OpenShift mirror hosting client binaries.
 pub const OC_MIRROR_BASE: &str = "https://mirror.openshift.com/pub/openshift-v4";
 
-/// Default directory to store downloaded oc binaries relative to user's home directory
+/// Directory holding downloaded `oc` binaries, relative to home.
 pub const OC_BIN_DIR: &str = ".local/bin/oc_bins";
 
-/// Represents a target platform for OpenShift client binaries
-///
-/// Each platform defines the specific paths and naming conventions used
-/// by the OpenShift mirror for that platform's binaries.
+/// Target platform for an OpenShift client binary.
 #[derive(Debug, Clone)]
 pub struct Platform {
-    /// Human-readable platform name (e.g. "linux-x86_64")
+    /// Platform name, such as `linux-x86_64`.
     pub name: &'static str,
-    /// Mirror subdirectory path for this platform
+    /// Mirror subdirectory for this platform.
     pub mirror_path: &'static str,
-    /// Binary suffix used in download URLs
+    /// Binary suffix used in download URLs.
     pub binary_suffix: &'static str,
-    /// File extension for the downloaded archive
+    /// Extension of the downloaded archive.
     pub file_extension: &'static str,
 }
 
 impl Platform {
-    /// Linux x86_64 platform configuration
+    /// Linux `x86_64` platform configuration.
     pub const LINUX_X86_64: Platform = Platform {
         name: "linux-x86_64",
         mirror_path: "x86_64",
@@ -36,22 +29,13 @@ impl Platform {
         file_extension: "tar.gz",
     };
 
-    /// Automatically detect the current platform based on OS and architecture
-    ///
-    /// Returns the appropriate Platform constant based on the runtime environment.
-    /// Currently only supports Linux x86_64.
+    /// Detect the current platform.
     #[must_use]
     pub fn detect() -> Platform {
         Self::LINUX_X86_64
     }
 
-    /// Build the download URL for a specific version on this platform
-    ///
-    /// # Arguments
-    /// * `version` - The OpenShift version to download (e.g. "4.19.0")
-    ///
-    /// # Returns
-    /// Complete URL to download the specified version for this platform
+    /// Build the download URL for a version on this platform.
     #[must_use]
     pub fn build_download_url(&self, version: &str) -> String {
         format!(
@@ -65,10 +49,7 @@ impl Platform {
         )
     }
 
-    /// Build the base URL for listing available versions on this platform
-    ///
-    /// # Returns
-    /// URL to the directory listing of available versions for this platform
+    /// Build the URL listing available versions for this platform.
     #[must_use]
     pub fn build_versions_url(&self) -> String {
         format!("{}/{}/clients/ocp/", OC_MIRROR_BASE, self.mirror_path)

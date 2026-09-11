@@ -16,7 +16,7 @@ fn main() {
     let mut buffer: Vec<u8> = Vec::new();
     man.render(&mut buffer).expect("failed to render man page");
 
-    // Write to OUT_DIR so the binary can embed the man page at compile time
+    // Embedded by manpage.rs at compile time
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
     fs::write(Path::new(&out_dir).join("ovc.1"), &buffer).expect("failed to write man page");
 }
