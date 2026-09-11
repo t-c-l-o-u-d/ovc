@@ -1117,6 +1117,16 @@ mod cli_list_tests {
     fn test_list_available_versions_no_matches() {
         let output = run_ovc(&["--list", "999.999"]);
         assert!(!output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.trim().is_empty());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stderr.contains("No versions found matching"));
+    }
+
+    #[test]
+    fn test_list_no_matches_verbose() {
+        let output = run_ovc(&["-v", "--list", "999.999"]);
+        assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("No versions found matching 999.999"));
     }
@@ -1156,18 +1166,22 @@ mod cli_installed_tests {
             .output()
             .expect("Failed to execute ovc command");
 
-        // Should fail when no versions are installed
+        // Should fail quietly when no versions are installed
         assert!(!output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.trim().is_empty());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("No installed versions found matching 4.19"));
+        assert!(!stderr.contains("No installed versions found matching"));
     }
 
     #[test]
     fn test_installed_no_matches() {
         let output = run_ovc(&["--installed", "999.999"]);
         assert!(!output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.trim().is_empty());
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("No installed versions found matching"));
+        assert!(!stderr.contains("No installed versions found matching"));
     }
 }
 
@@ -1444,6 +1458,24 @@ mod cli_installed_isolated_tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.contains('(') && stdout.contains(')'));
         assert!(stdout.contains("oc_bins"));
+    }
+
+    #[test]
+    fn test_installed_no_matches_verbose() {
+        let temp_dir = TestTempDir::new().unwrap();
+        let home = temp_dir.path();
+        create_fake_binaries(home, &["4.19.0"]);
+
+        let output = Command::new("cargo")
+            .args(["run", "--", "-v", "--installed", "999.999"])
+            .env("HOME", home)
+            .env("PATH", path_without_oc())
+            .output()
+            .expect("Failed to execute ovc command");
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("No installed versions found matching 999.999"));
     }
 
     #[test]
