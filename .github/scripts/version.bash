@@ -33,5 +33,4 @@ else
   git config user.email "github-actions[bot]@users.noreply.github.com"
   git add Cargo.toml Cargo.lock
   git commit --message "Bump version to ${VERSION} [skip ci]"
-  git push
 fi

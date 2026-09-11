@@ -16,6 +16,11 @@ permissions:
 concurrency:
   group: release
   cancel-in-progress: false
+env:
+  # Silence git init branch-name hint
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 jobs:
   release:
     name: >-

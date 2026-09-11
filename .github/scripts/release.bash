@@ -11,9 +11,13 @@ if [[ -z "${VERSION}" ]]; then
   exit 1
 fi
 
+echo -e "\n[push]"
+git push
+
 echo -e "\n[release]"
 gh release create "v${VERSION}" \
   --title "v${VERSION}" \
+  --target "$(git rev-parse HEAD)" \
   --generate-notes \
   "ovc-${ARCH}" \
   "ovc-${ARCH}.sha256"
