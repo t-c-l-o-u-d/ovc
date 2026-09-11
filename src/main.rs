@@ -194,7 +194,10 @@ fn cmd_list_installed(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(format!("No installed versions found matching {version_pattern}").into());
+        if verbose {
+            eprintln!("No installed versions found matching {version_pattern}");
+        }
+        exit(1);
     }
 
     for version in matching_versions {
@@ -232,7 +235,10 @@ fn cmd_list_available(version_pattern: &str, verbose: bool) -> Result<(), Box<dy
         .collect();
 
     if matching_versions.is_empty() {
-        return Err(format!("No versions found matching {version_pattern}").into());
+        if verbose {
+            eprintln!("No versions found matching {version_pattern}");
+        }
+        exit(1);
     }
 
     for version in matching_versions {
