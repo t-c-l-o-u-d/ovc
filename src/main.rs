@@ -76,6 +76,12 @@ fn main() {
         return;
     }
 
+    // Checked here so meta flags win
+    if cli.insecure && !cli.match_server {
+        eprintln!("ovc: --insecure requires --match-server");
+        exit(1);
+    }
+
     let standalone = cli.standalone_action();
     let verbose = cli.verbose;
     let insecure = cli.insecure;

@@ -1256,6 +1256,177 @@ mod cli_match_server_tests {
 }
 
 // =============================================================================
+// MUTUAL EXCLUSIVITY TESTS
+// =============================================================================
+
+#[cfg(test)]
+mod cli_mutual_exclusivity_tests {
+    use super::*;
+
+    /// Every pair of actions is rejected at parse time
+    fn assert_conflict(args: &[&str]) {
+        let output = run_ovc(args);
+        assert!(!output.status.success(), "Expected failure for {args:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("cannot be used with"),
+            "Expected conflict error for {args:?}, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_list_conflicts_with_installed() {
+        assert_conflict(&["--list", "4.19", "--installed", "4.19"]);
+    }
+
+    #[test]
+    fn test_list_conflicts_with_prune() {
+        assert_conflict(&["--list", "4.19", "--prune"]);
+    }
+
+    #[test]
+    fn test_installed_conflicts_with_prune() {
+        assert_conflict(&["--installed", "4.19", "--prune"]);
+    }
+
+    #[test]
+    fn test_list_conflicts_with_target_version() {
+        assert_conflict(&["--list", "4.19", "4.20"]);
+    }
+
+    #[test]
+    fn test_installed_conflicts_with_target_version() {
+        assert_conflict(&["--installed", "4.19", "4.20"]);
+    }
+
+    #[test]
+    fn test_prune_conflicts_with_target_version() {
+        assert_conflict(&["--prune", "4.19"]);
+    }
+
+    #[test]
+    fn test_match_server_conflicts_with_target_version() {
+        assert_conflict(&["--match-server", "4.19"]);
+    }
+}
+
+// =============================================================================
+// INSECURE DEPENDENCY TESTS
+// =============================================================================
+
+#[cfg(test)]
+mod cli_insecure_tests {
+    use super::*;
+
+    /// --insecure is rejected without --match-server
+    fn assert_rejected(args: &[&str]) {
+        let output = run_ovc(args);
+        assert!(!output.status.success(), "Expected failure for {args:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("--insecure") || stderr.contains("--match-server"),
+            "Expected insecure error for {args:?}, got: {stderr}"
+        );
+    }
+
+    #[test]
+    fn test_insecure_alone_is_rejected() {
+        let output = run_ovc(&["--insecure"]);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("--insecure requires --match-server"),
+            "Expected dependency error, got: {stderr}"
+        );
+    }
+
+    /// Meta flags outrank the --insecure dependency check
+    #[test]
+    fn test_insecure_does_not_block_version() {
+        let output = run_ovc(&["--insecure", "--version"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(stdout.trim(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn test_insecure_does_not_block_completion() {
+        let output = run_ovc(&["--insecure", "--completion", "bash"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("complete -F _ovc"));
+    }
+
+    #[test]
+    fn test_insecure_does_not_block_help() {
+        let output = run_ovc(&["--insecure", "--help"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("OpenShift Client Version Control"));
+    }
+
+    #[test]
+    fn test_insecure_with_list_is_rejected() {
+        assert_rejected(&["--insecure", "--list", "4.19"]);
+    }
+
+    #[test]
+    fn test_insecure_with_installed_is_rejected() {
+        assert_rejected(&["--insecure", "--installed", "4.19"]);
+    }
+
+    #[test]
+    fn test_insecure_with_prune_is_rejected() {
+        assert_rejected(&["--insecure", "--prune"]);
+    }
+
+    /// Guards a clap quirk: requires drops on conflict
+    #[test]
+    fn test_insecure_with_target_version_is_rejected() {
+        assert_rejected(&["4.19", "--insecure"]);
+    }
+}
+
+// =============================================================================
+// UNRESTRICTED FLAG TESTS
+// =============================================================================
+
+#[cfg(test)]
+mod cli_unrestricted_tests {
+    use super::*;
+
+    #[test]
+    fn test_version_wins_over_list() {
+        let output = run_ovc(&["--version", "--list", "4.19"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(stdout.trim(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn test_completion_wins_over_prune() {
+        let output = run_ovc(&["--completion", "bash", "--prune"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("complete -F _ovc"));
+    }
+
+    #[test]
+    fn test_help_wins_over_installed() {
+        let output = run_ovc(&["--installed", "4.19", "--help"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("OpenShift Client Version Control"));
+    }
+
+    #[test]
+    fn test_verbose_combines_with_list() {
+        let output = run_ovc(&["--list", "4.19", "--verbose"]);
+        assert!(output.status.success());
+    }
+}
+
+// =============================================================================
 // COMPLETION TESTS
 // =============================================================================
 
