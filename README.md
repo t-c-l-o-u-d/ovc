@@ -21,8 +21,9 @@ versions.
   (e.g. `~/.local/bin`)
 
   ```bash
-  chmod +x ~/Downloads/ovc-*
-  mv ~/Downloads/ovc-* ~/.local/bin/ovc
+  curl -fLsS --create-dirs -o ~/.local/bin/ovc \
+    https://github.com/t-c-l-o-u-d/ovc/releases/latest/download/ovc-linux-x86_64 \
+    && chmod +x ~/.local/bin/ovc
   ```
 
 ## Usage
