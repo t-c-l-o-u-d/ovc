@@ -22,7 +22,7 @@ jobs:
       ${{ inputs.version && format('v{0}', inputs.version) || 'Build' }}
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,12 +43,12 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: bash .github/scripts/release.bash "${VERSION}"
       - name: Upload Binary Artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ovc-linux-x86_64
           path: ovc-linux-x86_64
       - name: Upload Checksum Artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ovc-linux-x86_64.sha256
           path: ovc-linux-x86_64.sha256
