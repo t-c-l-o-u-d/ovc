@@ -1268,8 +1268,28 @@ mod cli_completion_tests {
         let output = run_ovc(&["--completion", "bash"]);
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("_ovc_completions"));
-        assert!(stdout.contains("complete -o nosort"));
+        assert!(stdout.contains("_ovc()"));
+        assert!(stdout.contains("complete -F _ovc"));
+    }
+
+    /// Completions cover every flag defined in the parser
+    #[test]
+    fn test_completion_lists_flags() {
+        let output = run_ovc(&["--completion", "bash"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for flag in [
+            "--version",
+            "--list",
+            "--installed",
+            "--prune",
+            "--match-server",
+            "--insecure",
+            "--verbose",
+            "--completion",
+        ] {
+            assert!(stdout.contains(flag), "Missing {flag} in: {stdout}");
+        }
     }
 
     #[test]
@@ -1278,8 +1298,8 @@ mod cli_completion_tests {
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("unsupported shell: zsh"),
-            "Expected unsupported shell error, got: {stderr}"
+            stderr.contains("invalid value 'zsh'") && stderr.contains("possible values: bash"),
+            "Expected invalid value error, got: {stderr}"
         );
     }
 
@@ -1289,17 +1309,9 @@ mod cli_completion_tests {
         assert!(!output.status.success());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("unsupported shell: fish"),
-            "Expected unsupported shell error, got: {stderr}"
+            stderr.contains("invalid value 'fish'") && stderr.contains("possible values: bash"),
+            "Expected invalid value error, got: {stderr}"
         );
-    }
-
-    #[test]
-    fn test_completion_bash_case_insensitive() {
-        let output = run_ovc(&["--completion", "BASH"]);
-        assert!(output.status.success());
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("_ovc_completions"));
     }
 }
 
