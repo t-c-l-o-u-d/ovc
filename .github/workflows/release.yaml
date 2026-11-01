@@ -48,12 +48,12 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: bash .github/scripts/release.bash "${VERSION}"
       - name: Upload Binary Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ovc-linux-x86_64
           path: ovc-linux-x86_64
       - name: Upload Checksum Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ovc-linux-x86_64.sha256
           path: ovc-linux-x86_64.sha256
