@@ -7,12 +7,17 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use reqwest::StatusCode;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::{Platform, compare_versions, xdg};
+use crate::{MIRROR_MAJORS, Platform, compare_versions, major_version, xdg};
 
 /// Cache lifetime in seconds.
 const CACHE_TTL_SECS: u64 = 72 * 60 * 60;
+
+/// Most listing pages to read per mirror tree.
+const MAX_LISTING_PAGES: usize = 20;
 
 /// A version and its download URL for each platform.
 #[derive(Serialize, Deserialize, Clone)]
@@ -30,6 +35,9 @@ pub struct VersionCache {
     versions: Vec<VersionInfo>,
     /// Unix timestamp when the cache was written.
     timestamp: u64,
+    /// Mirror tree majors the listing covers.
+    #[serde(default)]
+    majors: Vec<u32>,
 }
 
 /// Cache layout written by earlier releases, read to migrate it.
@@ -52,10 +60,7 @@ impl VersionCache {
     /// Create a cache stamped with the current time.
     #[must_use]
     pub fn new(versions: Vec<VersionInfo>) -> Self {
-        Self {
-            versions,
-            timestamp: current_unix_timestamp(),
-        }
+        Self::with_timestamp(versions, current_unix_timestamp())
     }
 
     /// Create a cache with a specific timestamp.
@@ -65,6 +70,7 @@ impl VersionCache {
         Self {
             versions,
             timestamp,
+            majors: MIRROR_MAJORS.to_vec(),
         }
     }
 
@@ -96,10 +102,11 @@ impl VersionCache {
         self.timestamp
     }
 
-    /// Check whether the cache has outlived its lifetime.
+    /// Check whether the cache is too old or covers other trees.
     #[must_use]
     pub fn is_expired(&self) -> bool {
-        current_unix_timestamp().saturating_sub(self.timestamp) >= CACHE_TTL_SECS
+        self.majors != MIRROR_MAJORS
+            || current_unix_timestamp().saturating_sub(self.timestamp) >= CACHE_TTL_SECS
     }
 }
 
@@ -201,13 +208,10 @@ pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
     version_strings
         .iter()
         .map(|version| {
-            let mut urls = HashMap::new();
-            for platform in &platforms {
-                urls.insert(
-                    platform.name.to_string(),
-                    platform.build_download_url(version),
-                );
-            }
+            let urls = platforms
+                .iter()
+                .filter_map(|p| Some((p.name.to_string(), p.build_download_url(version)?)))
+                .collect();
             VersionInfo {
                 version: version.clone(),
                 urls,
@@ -216,22 +220,72 @@ pub fn build_version_info(version_strings: &[String]) -> Vec<VersionInfo> {
         .collect()
 }
 
+/// Parse one listing page into a major's versions and next page.
+#[must_use]
+pub fn parse_listing(body: &str, major: u32) -> (Vec<String>, Option<String>) {
+    let mut versions = vec![];
+    let mut next_page = None;
+    for line in body.lines() {
+        let Some(href) = line.split('"').nth(1) else {
+            continue;
+        };
+        if href.starts_with("?entry=") {
+            next_page = Some(href.to_string());
+        } else if let Some(ver) = href.strip_suffix('/')
+            && ver.chars().next().is_some_and(|c| c.is_ascii_digit())
+            && major_version(ver) == Some(major)
+        {
+            versions.push(ver.to_string());
+        }
+    }
+    (versions, next_page)
+}
+
+/// Fetch every listing page of one major's mirror tree.
+///
+/// A missing tree yields no versions.
+fn fetch_tree_versions(
+    client: &Client,
+    major: u32,
+    verbose: bool,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let base = Platform::detect().build_versions_url(major);
+    let mut versions = vec![];
+    let mut page = String::new();
+
+    for _ in 0..MAX_LISTING_PAGES {
+        let resp = client.get(format!("{base}{page}")).send()?;
+        if page.is_empty() && resp.status() == StatusCode::NOT_FOUND {
+            if verbose {
+                eprintln!("Mirror tree not found, skipping: {base}");
+            }
+            return Ok(versions);
+        }
+
+        let (found, next_page) = parse_listing(&resp.error_for_status()?.text()?, major);
+        versions.extend(found);
+        match next_page {
+            Some(next) => page = next,
+            None => return Ok(versions),
+        }
+    }
+
+    Err(format!("Too many listing pages: {base}").into())
+}
+
 /// Fetch every version from the mirror and cache the result.
 ///
 /// # Errors
-/// Fails when the request fails or the listing cannot be parsed.
+/// Fails when a request fails or the mirror lists no versions.
 pub fn fetch_and_cache_versions(verbose: bool) -> Result<Vec<String>, Box<dyn Error>> {
-    let url = Platform::detect().build_versions_url();
-    let body = reqwest::blocking::get(&url)?.text()?;
-
+    let client = Client::new();
     let mut versions = vec![];
-    for line in body.lines() {
-        if let Some(ver) = line.split('"').nth(1)
-            && ver.ends_with('/')
-            && ver.chars().next().is_some_and(|c| c.is_ascii_digit())
-        {
-            versions.push(ver.trim_end_matches('/').to_string());
-        }
+    for &major in MIRROR_MAJORS {
+        versions.extend(fetch_tree_versions(&client, major, verbose)?);
+    }
+
+    if versions.is_empty() {
+        return Err("No versions found on the mirror".into());
     }
 
     versions.sort_by(|a, b| compare_versions(a, b));

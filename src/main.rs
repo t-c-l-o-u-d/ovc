@@ -447,7 +447,9 @@ fn find_download_url(
 ) -> Result<String, Box<dyn Error>> {
     let Some(cache) = load_cached_versions(verbose) else {
         // No cache, so ask the mirror
-        let url = platform.build_download_url(version);
+        let url = platform
+            .build_download_url(version)
+            .ok_or_else(|| version_missing(version, platform))?;
         return if url_exists(&url)? {
             Ok(url)
         } else {
