@@ -48,6 +48,12 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
+/// Parse the major number from a version string.
+#[must_use]
+pub fn major_version(version: &str) -> Option<u32> {
+    version.split('.').next()?.parse().ok()
+}
+
 /// Find an exact match, else the latest sharing `major.minor`.
 #[must_use]
 pub fn find_matching_version(
