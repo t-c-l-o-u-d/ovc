@@ -89,6 +89,27 @@ mod version_comparison_tests {
     }
 
     #[test]
+    fn major_version_parsing() {
+        assert_eq!(major_version("4.19.0"), Some(4));
+        assert_eq!(major_version("5.0.0-rc.1"), Some(5));
+        assert_eq!(major_version("5"), Some(5));
+        assert_eq!(major_version("invalid.version"), None);
+        assert_eq!(major_version(""), None);
+    }
+
+    #[test]
+    fn compare_versions_across_majors() {
+        assert_eq!(
+            compare_versions("5.0.0", "4.22.0"),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            compare_versions("5.0.0-rc.1", "4.22.9"),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
     fn compare_versions_prerelease() {
         // Test pre-release versions
         assert_eq!(
@@ -243,6 +264,20 @@ mod version_matching_tests {
     }
 
     #[test]
+    fn matching_next_major() {
+        let available = vec![
+            "4.22.0".to_string(),
+            "5.0.0-rc.1".to_string(),
+            "5.0.0".to_string(),
+        ];
+
+        assert_eq!(
+            find_matching_version("5.0", &available),
+            Some("5.0.0".to_string())
+        );
+    }
+
+    #[test]
     fn matching_invalid_input() {
         let available = vec!["4.1.0".to_string(), "4.2.0".to_string()];
 
@@ -352,9 +387,9 @@ mod platform_tests {
         let platform = Platform::detect();
 
         // Should detect a valid platform
-        assert!(!platform.name.is_empty());
-        assert!(!platform.mirror_path.is_empty());
-        assert!(!platform.binary_suffix.is_empty());
+        assert_ne!(platform.name, "");
+        assert_ne!(platform.mirror_path, "");
+        assert_ne!(platform.binary_suffix, "");
         assert_eq!(platform.file_extension, "tar.gz");
     }
 
@@ -362,23 +397,40 @@ mod platform_tests {
     fn platform_url_building() {
         let platform = Platform::LINUX_X86_64;
 
-        let download_url = platform.build_download_url("4.1.0");
-        assert!(download_url.contains("https://mirror.openshift.com"));
-        assert!(download_url.contains("4.1.0"));
-        assert!(download_url.contains("linux"));
-        assert!(download_url.contains("tar.gz"));
         assert_eq!(
-            download_url,
-            "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.1.0/openshift-client-linux-4.1.0.tar.gz"
+            platform.build_download_url("4.1.0").as_deref(),
+            Some(
+                "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.1.0/openshift-client-linux-4.1.0.tar.gz"
+            )
         );
-
-        let versions_url = platform.build_versions_url();
-        assert!(versions_url.contains("https://mirror.openshift.com"));
-        assert!(versions_url.contains("clients/ocp"));
         assert_eq!(
-            versions_url,
+            platform.build_versions_url(4),
             "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
         );
+    }
+
+    #[test]
+    fn url_building_per_major() {
+        let platform = Platform::LINUX_X86_64;
+
+        assert_eq!(
+            platform.build_download_url("5.0.0-rc.1").as_deref(),
+            Some(
+                "https://mirror.openshift.com/pub/openshift-v5/x86_64/clients/ocp/5.0.0-rc.1/openshift-client-linux-5.0.0-rc.1.tar.gz"
+            )
+        );
+        assert_eq!(
+            platform.build_versions_url(5),
+            "https://mirror.openshift.com/pub/openshift-v5/x86_64/clients/ocp/"
+        );
+    }
+
+    #[test]
+    fn url_building_without_major() {
+        let platform = Platform::LINUX_X86_64;
+
+        assert_eq!(platform.build_download_url("invalid.version"), None);
+        assert_eq!(platform.build_download_url(""), None);
     }
 
     #[test]
@@ -386,14 +438,16 @@ mod platform_tests {
         let platforms = [Platform::LINUX_X86_64];
 
         for platform in &platforms {
-            let download_url = platform.build_download_url("4.19.0");
+            let download_url = platform.build_download_url("4.19.0").unwrap();
             assert!(download_url.starts_with("https://mirror.openshift.com"));
             assert!(download_url.contains("4.19.0"));
             assert!(download_url.ends_with(".tar.gz"));
 
-            let versions_url = platform.build_versions_url();
-            assert!(versions_url.starts_with("https://mirror.openshift.com"));
-            assert!(versions_url.ends_with("/clients/ocp/"));
+            for &major in MIRROR_MAJORS {
+                let versions_url = platform.build_versions_url(major);
+                assert!(versions_url.starts_with("https://mirror.openshift.com"));
+                assert!(versions_url.ends_with("/clients/ocp/"));
+            }
         }
     }
 }
@@ -431,6 +485,12 @@ mod version_pattern_tests {
     fn false_prefix_minor_boundary() {
         assert!(!matches_version_pattern("4.10.0", "4.1"));
         assert!(!matches_version_pattern("4.190.0", "4.19"));
+    }
+
+    #[test]
+    fn major_boundary() {
+        assert!(matches_version_pattern("5.0.0", "5.0"));
+        assert!(!matches_version_pattern("5.0.0", "4.0"));
     }
 
     #[test]
@@ -476,7 +536,9 @@ mod version_pattern_tests {
 
 #[cfg(test)]
 mod cache_unit_tests {
-    use ovc::cache::{VersionCache, VersionInfo, build_version_info, format_cache_age};
+    use ovc::cache::{
+        VersionCache, VersionInfo, build_version_info, format_cache_age, parse_listing,
+    };
     use std::collections::HashMap;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -520,7 +582,7 @@ mod cache_unit_tests {
     #[test]
     fn get_version_strings_empty() {
         let cache = VersionCache::new(vec![]);
-        assert!(cache.get_version_strings().is_empty());
+        assert_eq!(cache.get_version_strings(), Vec::<String>::new());
     }
 
     #[test]
@@ -662,6 +724,59 @@ mod cache_unit_tests {
         let v = make_version_info("4.19.0", "linux-x86_64", "https://example.com/4.19.0");
         let cache = VersionCache::with_timestamp(vec![v], now - 72 * 3600);
         assert!(cache.is_expired());
+    }
+
+    #[test]
+    fn cache_without_majors_expired() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let json = format!(r#"{{"versions":[],"timestamp":{now}}}"#);
+        let cache: VersionCache = serde_json::from_str(&json).unwrap();
+        assert!(cache.is_expired());
+    }
+
+    #[test]
+    fn cache_other_majors_expired() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let json = format!(r#"{{"versions":[],"timestamp":{now},"majors":[4]}}"#);
+        let cache: VersionCache = serde_json::from_str(&json).unwrap();
+        assert!(cache.is_expired());
+    }
+
+    /// Listing page shaped like the mirror's HTML.
+    const LISTING_PAGE: &str = r##"
+    <tr><td></td><td><b>Listing truncated...</b> <a href="?entry=2042">Next Page</a></td></tr>
+                             <td><a href=".."><svg width="1.5em"><use xlink:href="#go-up"></use></svg>
+                <a href="4.22.0/">
+                <a href="5.0.0-rc.1/">
+                <a href="5.0.0/">
+                <a href="candidate-5.0/">
+                <a href="stable/">
+                <a href="sha256sum.txt">
+    "##;
+
+    #[test]
+    fn parse_listing_filters_major() {
+        let (v4, _) = parse_listing(LISTING_PAGE, 4);
+        assert_eq!(v4, vec!["4.22.0"]);
+
+        let (v5, _) = parse_listing(LISTING_PAGE, 5);
+        assert_eq!(v5, vec!["5.0.0-rc.1", "5.0.0"]);
+    }
+
+    #[test]
+    fn parse_listing_next_page() {
+        let (_, next) = parse_listing(LISTING_PAGE, 5);
+        assert_eq!(next.as_deref(), Some("?entry=2042"));
+
+        let (versions, next) = parse_listing(r#"<a href="5.0.0/">"#, 5);
+        assert_eq!(versions, vec!["5.0.0"]);
+        assert_eq!(next, None);
     }
 }
 
@@ -881,7 +996,7 @@ mod cli_basic_tests {
 
         // Errors belong on stderr
         assert!(stdout.trim().is_empty() || !stdout.contains("error"));
-        assert!(!stderr.trim().is_empty());
+        assert_ne!(stderr.trim(), "");
     }
 }
 
@@ -929,7 +1044,7 @@ mod cli_list_tests {
 
         // Should contain versions that start with 4.19
         let lines: Vec<&str> = stdout.lines().collect();
-        assert!(!lines.is_empty());
+        assert_ne!(lines, Vec::<&str>::new());
 
         for line in lines {
             if !line.trim().is_empty() {
@@ -953,7 +1068,7 @@ mod cli_list_tests {
 
         // Should contain versions that start with 4.19.0
         let lines: Vec<&str> = stdout.lines().collect();
-        assert!(!lines.is_empty());
+        assert_ne!(lines, Vec::<&str>::new());
 
         for line in lines {
             if !line.trim().is_empty() {
@@ -983,7 +1098,7 @@ mod cli_list_tests {
         let output = run_ovc(&["--list", "999.999"]);
         assert!(!output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.trim().is_empty());
+        assert_eq!(stdout.trim(), "");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stderr.contains("No versions found matching"));
     }
@@ -1035,7 +1150,7 @@ mod cli_installed_tests {
         // Fails quietly when none installed
         assert!(!output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.trim().is_empty());
+        assert_eq!(stdout.trim(), "");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stderr.contains("No installed versions found matching"));
     }
@@ -1045,7 +1160,7 @@ mod cli_installed_tests {
         let output = run_ovc(&["--installed", "999.999"]);
         assert!(!output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.trim().is_empty());
+        assert_eq!(stdout.trim(), "");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stderr.contains("No installed versions found matching"));
     }
