@@ -1,16 +1,6 @@
 # ovc - OpenShift Client Version Control
 
-A command-line tool for managing OpenShift 4 client
-versions.
-
-## Features
-
-- **Download and manage multiple oc versions** - Download
-  any available OpenShift 4 client version from
-  mirror.openshift.com
-- **Linux support** - Works on Linux (x86_64)
-- **Version pattern matching** - List available versions
-  matching major.minor patterns
+A command-line tool for managing OpenShift client versions.
 
 ## Installation
 
@@ -28,16 +18,16 @@ versions.
 
 ## Usage
 
-- Download latest patch version of 4.19
+- Download latest patch version of 5.0
 
   ```bash
-  ovc 4.19
+  ovc 5.0
   ```
 
-- Download specific version
+- Download a specific version
 
   ```bash
-  ovc --list 4.14 | fzf | xargs ovc
+  ovc --list 4.22 | fzf | xargs ovc
   ```
 
 - Download matching `oc` directly from a currently
